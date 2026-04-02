@@ -363,17 +363,30 @@ async def _fleethunt_get_device(device_id: str) -> dict | None:
         return devices[0] if devices else None
 
 
+def _derive_status(d: dict) -> str:
+    """Derive vehicle status from speed and ignition."""
+    speed = d.get("speed", 0) or 0
+    ignition = d.get("ignition", 0)
+    if speed > 0:
+        return "moving"
+    if ignition == 1:
+        return "idle"
+    return "stopped"
+
+
 def _device_summary(d: dict) -> dict:
     """Extract key fields from a FleetHunt device."""
     return {
         "device_id": d.get("id"),
         "name": d.get("name", ""),
-        "status": d.get("status", ""),
+        "status": _derive_status(d),
         "speed": d.get("speed", 0),
-        "latitude": d.get("lat"),
-        "longitude": d.get("lng"),
-        "address": d.get("address", ""),
-        "last_update": d.get("last_update", ""),
+        "latitude": d.get("latitude"),
+        "longitude": d.get("longitude"),
+        "ignition": "on" if d.get("ignition") == 1 else "off",
+        "heading": d.get("angle", 0),
+        "odometer": d.get("odometer", 0),
+        "last_update": d.get("device_time", ""),
     }
 
 
@@ -562,25 +575,25 @@ async def _execute_logistics_tool(tool_name: str, params: dict) -> dict:
 
         if tool_name == "get_moving_vehicles":
             devices = await _fleethunt_get_fleet()
-            moving = [_device_summary(d) for d in devices if d.get("status") == "moving"]
+            moving = [_device_summary(d) for d in devices if (d.get("speed") or 0) > 0]
             return {"results": moving, "total": len(moving)}
 
         if tool_name == "get_idle_vehicles":
             devices = await _fleethunt_get_fleet()
-            idle = [_device_summary(d) for d in devices if d.get("status") == "idle"]
+            idle = [_device_summary(d) for d in devices if (d.get("speed") or 0) == 0 and d.get("ignition") == 1]
             return {"results": idle, "total": len(idle)}
 
         if tool_name == "get_stopped_vehicles":
             devices = await _fleethunt_get_fleet()
-            stopped = [_device_summary(d) for d in devices if d.get("status") == "stopped"]
+            stopped = [_device_summary(d) for d in devices if (d.get("speed") or 0) == 0 and d.get("ignition") == 0]
             return {"results": stopped, "total": len(stopped)}
 
         if tool_name == "get_fleet_summary":
             devices = await _fleethunt_get_fleet()
             total = len(devices)
-            moving = sum(1 for d in devices if d.get("status") == "moving")
-            idle = sum(1 for d in devices if d.get("status") == "idle")
-            stopped = sum(1 for d in devices if d.get("status") == "stopped")
+            moving = sum(1 for d in devices if (d.get("speed") or 0) > 0)
+            idle = sum(1 for d in devices if (d.get("speed") or 0) == 0 and d.get("ignition") == 1)
+            stopped = sum(1 for d in devices if (d.get("speed") or 0) == 0 and d.get("ignition") == 0)
             return {"total_vehicles": total, "moving": moving, "idle": idle, "stopped": stopped}
 
         if tool_name == "get_vehicles_near_location":
@@ -590,7 +603,7 @@ async def _execute_logistics_tool(tool_name: str, params: dict) -> dict:
             devices = await _fleethunt_get_fleet()
             nearby = []
             for d in devices:
-                dlat, dlng = d.get("lat"), d.get("lng")
+                dlat, dlng = d.get("latitude"), d.get("longitude")
                 if dlat is not None and dlng is not None:
                     dist = _haversine_km(lat, lng, float(dlat), float(dlng))
                     if dist <= radius:
@@ -613,14 +626,14 @@ async def _execute_logistics_tool(tool_name: str, params: dict) -> dict:
             return {
                 "device_id": device.get("id"),
                 "name": device.get("name", ""),
-                "status": device.get("status", ""),
-                "latitude": device.get("lat"),
-                "longitude": device.get("lng"),
+                "status": _derive_status(device),
+                "latitude": device.get("latitude"),
+                "longitude": device.get("longitude"),
                 "speed": device.get("speed", 0),
-                "heading": device.get("course", 0),
-                "address": device.get("address", ""),
-                "last_update": device.get("last_update", ""),
-                "ignition": device.get("ignition", ""),
+                "heading": device.get("angle", 0),
+                "ignition": "on" if device.get("ignition") == 1 else "off",
+                "odometer": device.get("odometer", 0),
+                "last_update": device.get("device_time", ""),
             }
 
         return {"error": f"Unknown logistics tool: {tool_name}"}
