@@ -5,6 +5,7 @@ to their data sources and workflows as defined in the architecture doc.
 """
 
 import math
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -363,6 +364,25 @@ async def _fleethunt_get_device(device_id: str) -> dict | None:
         return devices[0] if devices else None
 
 
+def _is_active_device(d: dict, max_stale_days: int = 7) -> bool:
+    """Return True if the device reported data within max_stale_days."""
+    dt_str = d.get("device_time")
+    if not dt_str:
+        return False
+    try:
+        device_time = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max_stale_days)
+        return device_time >= cutoff
+    except (ValueError, TypeError):
+        return False
+
+
+async def _fleethunt_get_active_fleet() -> list[dict]:
+    """Fetch all devices and filter out stale/decommissioned ones (>7 days old)."""
+    all_devices = await _fleethunt_get_fleet()
+    return [d for d in all_devices if _is_active_device(d)]
+
+
 def _derive_status(d: dict) -> str:
     """Derive vehicle status from speed and ignition."""
     speed = d.get("speed", 0) or 0
@@ -558,12 +578,12 @@ async def _execute_logistics_tool(tool_name: str, params: dict) -> dict:
     """Execute a logistics tool against the real FleetHunt API."""
     try:
         if tool_name == "get_fleet_location":
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             return {"results": [_device_summary(d) for d in devices], "total": len(devices)}
 
         if tool_name == "get_vehicle_by_name":
             name = (params.get("name") or "").lower()
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             matches = [_device_summary(d) for d in devices if name in (d.get("name") or "").lower()]
             return {"results": matches, "total": len(matches)}
 
@@ -574,22 +594,22 @@ async def _execute_logistics_tool(tool_name: str, params: dict) -> dict:
             return _device_summary(device)
 
         if tool_name == "get_moving_vehicles":
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             moving = [_device_summary(d) for d in devices if (d.get("speed") or 0) > 0]
             return {"results": moving, "total": len(moving)}
 
         if tool_name == "get_idle_vehicles":
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             idle = [_device_summary(d) for d in devices if (d.get("speed") or 0) == 0 and d.get("ignition") == 1]
             return {"results": idle, "total": len(idle)}
 
         if tool_name == "get_stopped_vehicles":
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             stopped = [_device_summary(d) for d in devices if (d.get("speed") or 0) == 0 and d.get("ignition") == 0]
             return {"results": stopped, "total": len(stopped)}
 
         if tool_name == "get_fleet_summary":
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             total = len(devices)
             moving = sum(1 for d in devices if (d.get("speed") or 0) > 0)
             idle = sum(1 for d in devices if (d.get("speed") or 0) == 0 and d.get("ignition") == 1)
@@ -600,7 +620,7 @@ async def _execute_logistics_tool(tool_name: str, params: dict) -> dict:
             lat = params["latitude"]
             lng = params["longitude"]
             radius = params.get("radius_km", 10)
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             nearby = []
             for d in devices:
                 dlat, dlng = d.get("latitude"), d.get("longitude")
@@ -615,7 +635,7 @@ async def _execute_logistics_tool(tool_name: str, params: dict) -> dict:
 
         if tool_name == "get_speeding_vehicles":
             threshold = params.get("threshold_kmh", 100)
-            devices = await _fleethunt_get_fleet()
+            devices = await _fleethunt_get_active_fleet()
             speeding = [_device_summary(d) for d in devices if (d.get("speed") or 0) > threshold]
             return {"results": speeding, "total": len(speeding), "threshold_kmh": threshold}
 

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     fleethunt_base_url: str = "https://app.fleethunt.ca/api"
     fleethunt_api_key: str = ""
 
+    fcm_backend_url: str = ""
+    fcm_backend_secret: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 
