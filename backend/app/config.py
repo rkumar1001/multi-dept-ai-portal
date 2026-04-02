@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     default_admin_email: str = ""
     default_admin_password: str = ""
 
+    fcm_backend_url: str = ""
+    fcm_backend_secret: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 
