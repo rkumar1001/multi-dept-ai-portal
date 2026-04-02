@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     default_admin_email: str = ""
     default_admin_password: str = ""
 
+    fleethunt_base_url: str = "https://app.fleethunt.ca/api"
+    fleethunt_api_key: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

@@ -4,11 +4,12 @@ Each department's agent has access to different tools that correspond
 to their data sources and workflows as defined in the architecture doc.
 """
 
-import os
 import math
 from typing import Any
 
 import httpx
+
+from app.config import get_settings
 
 # ── Tool definitions per department (Claude tool_use format) ────────────────
 
@@ -328,8 +329,9 @@ DEPARTMENT_TOOLS = {
 # In production these would call real APIs (Salesforce, SAP, QuickBooks, etc.)
 # Logistics tools call the real FleetHunt API.
 
-FLEETHUNT_BASE_URL = os.getenv("FLEETHUNT_BASE_URL", "https://app.fleethunt.ca/api")
-FLEETHUNT_API_KEY = os.getenv("FLEETHUNT_API_KEY", "")
+_settings = get_settings()
+FLEETHUNT_BASE_URL = _settings.fleethunt_base_url
+FLEETHUNT_API_KEY = _settings.fleethunt_api_key
 
 
 async def _fleethunt_get_fleet() -> list[dict]:
