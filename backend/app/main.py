@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Multi-Department AI Agent Portal",
-    description="Single portal with role-based access for Sales, Finance & Accounting AI agents",
+    description="Single portal with role-based access for Sales, Finance, Accounting, Restaurant & Logistics AI agents",
     version="1.0.0",
     lifespan=lifespan,
 )

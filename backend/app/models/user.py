@@ -13,6 +13,7 @@ class Department(str, enum.Enum):
     FINANCE = "finance"
     ACCOUNTING = "accounting"
     RESTAURANT = "restaurant"
+    LOGISTICS = "logistics"
 
 
 class Role(str, enum.Enum):

@@ -43,7 +43,7 @@ export default function LoginPage() {
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900">AI Agent Portal</h1>
           <p className="mt-2 text-gray-600">
-            Multi-Department AI Assistant for Sales, Finance, Accounting &amp; Restaurant
+            Multi-Department AI Assistant for Sales, Finance, Accounting, Restaurant &amp; Logistics
           </p>
         </div>
 
@@ -106,7 +106,7 @@ export default function LoginPage() {
             {isRegister && (
               <div>
                 <label className="block text-sm font-medium text-gray-700">Department</label>
-                <div className="mt-2 grid grid-cols-3 gap-2">
+                <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
                   {Object.entries(DEPARTMENT_CONFIG).map(([key, cfg]) => (
                     <button
                       key={key}

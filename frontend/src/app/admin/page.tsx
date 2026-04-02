@@ -35,6 +35,7 @@ const DEPT_COLORS: Record<string, string> = {
   finance: "#22c55e",
   accounting: "#a855f7",
   restaurant: "#f97316",
+  logistics: "#14b8a6",
 };
 
 const COST_PER_1K_INPUT = 0.003;

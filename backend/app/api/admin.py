@@ -223,6 +223,12 @@ _MOCK_INSIGHTS: list[DepartmentInsights] = [
         KPI(label="Revenue/Seat", value="$47", trend="+$3 vs last month", trend_direction="up"),
         KPI(label="Reservation Fill", value="78%", trend="+5% vs last week", trend_direction="up"),
     ]),
+    DepartmentInsights(department="logistics", kpis=[
+        KPI(label="Fleet Size", value="280", trend="All tracked via GPS", trend_direction="flat"),
+        KPI(label="Vehicles Moving", value="87", trend="+12 vs yesterday", trend_direction="up"),
+        KPI(label="Idle Vehicles", value="17", trend="-5 vs yesterday", trend_direction="up"),
+        KPI(label="Fleet Utilization", value="37%", trend="+3% vs last week", trend_direction="up"),
+    ]),
 ]
 
 

@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   full_name: string;
-  department: "sales" | "finance" | "accounting" | "restaurant";
+  department: "sales" | "finance" | "accounting" | "restaurant" | "logistics";
   role: "user" | "dept_admin" | "admin";
 }
 
@@ -86,6 +86,12 @@ export const DEPARTMENT_CONFIG: Record<
     bgColor: "bg-orange-50",
     icon: "🍽️",
   },
+  logistics: {
+    label: "Logistics",
+    color: "text-teal-600",
+    bgColor: "bg-teal-50",
+    icon: "🚛",
+  },
 };
 
 export interface QuickPrompt {
@@ -121,5 +127,11 @@ export const DEPARTMENT_PROMPTS: Record<string, QuickPrompt[]> = {
     { icon: "📦", label: "Recent Orders", description: "View latest orders", prompt: "Show me the most recent orders with their details and totals." },
     { icon: "📊", label: "Order Stats", description: "Order analytics", prompt: "Get the order statistics and analytics overview." },
     { icon: "🍗", label: "Chicken Dishes", description: "All chicken curries & tandoori", prompt: "Show me all the chicken dishes including curries and tandoori items." },
+  ],
+  logistics: [
+    { icon: "🗺️", label: "Fleet Overview", description: "All vehicles with live status", prompt: "Give me a summary of the entire fleet — how many vehicles are moving, idle, and stopped?" },
+    { icon: "🚗", label: "Moving Vehicles", description: "Currently on the road", prompt: "Show me all vehicles that are currently moving with their speed and location." },
+    { icon: "📍", label: "Find Nearby", description: "Vehicles near a location", prompt: "Find all vehicles within 10 km of downtown Toronto (43.65, -79.38)." },
+    { icon: "⚡", label: "Speeding Alerts", description: "Vehicles over speed limit", prompt: "Show me any vehicles currently exceeding 100 km/h." },
   ],
 };

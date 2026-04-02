@@ -1,6 +1,6 @@
 # Multi-Department AI Agent Portal
 
-A single-portal, role-based access architecture for deploying specialized AI agents across **Sales**, **Finance**, and **Accounting** departments.
+A single-portal, role-based access architecture for deploying specialized AI agents across **Sales**, **Finance**, **Accounting**, and **Logistics** departments.
 
 Built following **Approach 1 (Single Portal with Role-Based Access)** from the architecture document.
 
@@ -9,15 +9,15 @@ Built following **Approach 1 (Single Portal with Role-Based Access)** from the a
 ```
 [Browser] → [Next.js Frontend :3000] → [FastAPI Backend :8000]
                                               │
-                          ┌───────────────────┼───────────────────┐
-                     [Sales Agent]      [Finance Agent]     [Accounting Agent]
-                          │                   │                    │
-                      [CRM Tools]        [ERP Tools]        [AP/AR Tools]
-                          │                   │                    │
-                     ┌────┴───────────────────┴────────────────────┘
-                     │
-              [Claude API (Anthropic)]
-              [PostgreSQL]  [Redis]
+                     ┌────────────┬───────────┼───────────┬────────────┐
+                [Sales Agent] [Finance Agent] [Accounting Agent] [Logistics Agent]
+                     │              │              │               │
+                 [CRM Tools]   [ERP Tools]    [AP/AR Tools]  [FleetHunt API]
+                     │              │              │               │
+                     └──────────────┴──────────────┴───────────────┘
+                                        │
+                                 [Claude API (Anthropic)]
+                                 [PostgreSQL]  [Redis]
 ```
 
 ## Tech Stack
@@ -42,6 +42,7 @@ Built following **Approach 1 (Single Portal with Role-Based Access)** from the a
 ```bash
 cp backend/.env.example backend/.env
 # Edit backend/.env and set your ANTHROPIC_API_KEY
+# For Logistics: also set FLEETHUNT_BASE_URL and FLEETHUNT_API_KEY
 ```
 
 ### 3. Run
@@ -86,7 +87,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 
 Each department gets a specialized agent with:
 - **Custom system prompt** tailored to the domain
-- **Department-specific tools** (CRM, ERP, AP/AR integrations)
+- **Department-specific tools** (CRM, ERP, AP/AR, FleetHunt integrations)
 - **Isolated knowledge base** (vector store namespace)
 - **Data isolation** via row-level scoping
 
@@ -95,6 +96,29 @@ Each department gets a specialized agent with:
 | Sales       | `query_crm`, `search_email_logs`, `get_market_data`  |
 | Finance     | `query_erp`, `get_cash_flow_forecast`, `check_compliance` |
 | Accounting  | `query_invoices`, `reconcile_accounts`, `calculate_tax`   |
+| Logistics   | `fleet_summary`, `vehicle_search`, `live_tracking`, `speed_alerts`, `idle_vehicles`, `geofence_check`, `proximity_search`, `fuel_analysis`, `maintenance_alerts`, `trip_history` |
+
+### Logistics Department (FleetHunt MCP)
+
+The Logistics agent is powered by the **FleetHunt GPS tracking API**, providing real-time fleet management capabilities:
+
+- **Fleet Summary** — Total vehicles, moving/idle/stopped counts, utilization %
+- **Vehicle Search** — Find vehicles by name or keyword
+- **Live Tracking** — Real-time GPS position, speed, heading, ignition state
+- **Speed Alerts** — Detect vehicles exceeding a speed threshold
+- **Idle Detection** — Find vehicles with engine on but not moving
+- **Geofence Monitoring** — Check which vehicles are within a geographic boundary
+- **Proximity Search** — Find vehicles near a specific lat/lng coordinate
+- **Fuel Analysis** — Odometer and distance-based fuel usage estimates
+- **Maintenance Alerts** — Flag vehicles due for service by odometer
+- **Trip History** — Retrieve historical trip data for a vehicle
+
+Vehicle status is derived from real-time data:
+| Status  | Condition                      |
+|---------|--------------------------------|
+| Moving  | `speed > 0`                    |
+| Idle    | `speed == 0` and `ignition on` |
+| Stopped | `speed == 0` and `ignition off`|
 
 ## Project Structure
 
@@ -102,20 +126,31 @@ Each department gets a specialized agent with:
 ├── backend/
 │   ├── app/
 │   │   ├── agents/          # Agent orchestrator, prompts, tools
+│   │   │   ├── orchestrator.py   # Routes queries to department agents
+│   │   │   ├── prompts.py        # System prompts per department
+│   │   │   └── tools.py          # Tool definitions & FleetHunt API integration
 │   │   ├── api/             # FastAPI route handlers
+│   │   │   ├── admin.py          # Admin dashboard & KPIs
+│   │   │   ├── auth.py           # Registration & login
+│   │   │   ├── chat.py           # Chat endpoint (dept-aware)
+│   │   │   └── conversations.py  # Conversation history
 │   │   ├── db/              # Database engine & session
 │   │   ├── middleware/      # Auth, rate limiting
-│   │   ├── models/          # SQLAlchemy models
+│   │   ├── models/          # SQLAlchemy models (User, Conversation)
 │   │   ├── services/        # Auth & usage services
-│   │   ├── config.py        # Settings (env-based)
+│   │   ├── config.py        # Settings (env-based, incl. FleetHunt config)
 │   │   └── main.py          # App entry point
-│   ├── requirements.txt
+│   ├── requirements.txt     # Python dependencies
+│   ├── .env.example         # Environment variable template
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/             # Next.js pages (login, chat, admin)
-│   │   ├── lib/             # API client
-│   │   └── types/           # TypeScript types
+│   │   ├── app/             # Next.js pages
+│   │   │   ├── login/       # Department selection & auth
+│   │   │   ├── chat/        # Chat interface per department
+│   │   │   └── admin/       # Usage dashboard & KPIs
+│   │   ├── lib/             # API client (axios)
+│   │   └── types/           # TypeScript types & department config
 │   ├── package.json
 │   └── Dockerfile
 ├── docker-compose.yml
