@@ -314,6 +314,8 @@ export default function ChatPage() {
                   ? "financial modeling, cash flow, risk analysis, and compliance"
                   : department === "accounting"
                   ? "invoices, reconciliation, expense categorization, and tax calculations"
+                  : department === "logistics"
+                  ? "fleet tracking, vehicle locations, speeding alerts, and GPS monitoring"
                   : "menu planning, inventory, reservations, and food cost analysis"}
                 .
               </p>
