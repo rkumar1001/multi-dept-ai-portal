@@ -39,15 +39,28 @@ async def _seed_default_admin():
 
     async with async_session() as session:
         result = await session.execute(select(User).where(User.email == settings.default_admin_email))
-        if result.scalar_one_or_none():
-            return
-        admin = User(
-            id=str(uuid.uuid4()),
-            email=settings.default_admin_email,
-            hashed_password=hash_password(settings.default_admin_password),
-            full_name="Admin",
-            department=Department.SALES,
-            role=Role.ADMIN,
-        )
-        session.add(admin)
+        if not result.scalar_one_or_none():
+            admin = User(
+                id=str(uuid.uuid4()),
+                email=settings.default_admin_email,
+                hashed_password=hash_password(settings.default_admin_password),
+                full_name="Admin",
+                department=Department.SALES,
+                role=Role.ADMIN,
+            )
+            session.add(admin)
+
+        # Seed The Masala Twist restaurant user
+        result = await session.execute(select(User).where(User.email == "themasalatwist@gmail.com"))
+        if not result.scalar_one_or_none():
+            restaurant_user = User(
+                id=str(uuid.uuid4()),
+                email="themasalatwist@gmail.com",
+                hashed_password=hash_password("oxnard"),
+                full_name="The Masala Twist",
+                department=Department.RESTAURANT,
+                role=Role.USER,
+            )
+            session.add(restaurant_user)
+
         await session.commit()

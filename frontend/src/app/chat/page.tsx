@@ -296,6 +296,14 @@ export default function ChatPage() {
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${deptConfig.bgColor} ${deptConfig.color}`}>
             {department}
           </span>
+          <div className="ml-auto">
+            <button
+              onClick={() => router.push("/")}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition"
+            >
+              🏠 Home
+            </button>
+          </div>
         </header>
 
         {/* Messages */}

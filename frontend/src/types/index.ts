@@ -121,10 +121,12 @@ export const DEPARTMENT_PROMPTS: Record<string, QuickPrompt[]> = {
     { icon: "📑", label: "Expense Report", description: "Categorized expense summary", prompt: "Show me a categorized breakdown of expenses for the current period." },
   ],
   restaurant: [
-    { icon: "📋", label: "Today's Menu & Costs", description: "Menu items with food cost %", prompt: "Show me the full menu with item prices and food cost percentages." },
-    { icon: "📦", label: "Low Inventory Items", description: "Items below par level", prompt: "Check inventory for any items that are below par level and need reordering." },
-    { icon: "🪑", label: "Tonight's Reservations", description: "Bookings and capacity", prompt: "Show me all reservations for today with table assignments and total covers." },
-    { icon: "📊", label: "Food Cost Analysis", description: "Cost trends and margins", prompt: "Analyze our food cost percentages across menu categories and flag items above 30%." },
+    { icon: "📋", label: "Full Menu", description: "Browse The Masala Twist menu", prompt: "Show me the full menu with all categories, items, and prices." },
+    { icon: "🌟", label: "Popular Dishes", description: "Customer favorites", prompt: "What are the most popular dishes at The Masala Twist?" },
+    { icon: "🥬", label: "Vegan Options", description: "Plant-based menu items", prompt: "Show me all the vegan options on the menu with prices." },
+    { icon: "📦", label: "Recent Orders", description: "View latest orders", prompt: "Show me the most recent orders with their details and totals." },
+    { icon: "📊", label: "Order Stats", description: "Order analytics", prompt: "Get the order statistics and analytics overview." },
+    { icon: "🍗", label: "Chicken Dishes", description: "All chicken curries & tandoori", prompt: "Show me all the chicken dishes including curries and tandoori items." },
   ],
   logistics: [
     { icon: "🗺️", label: "Fleet Overview", description: "All vehicles with live status", prompt: "Give me a summary of the entire fleet — how many vehicles are moving, idle, and stopped?" },
