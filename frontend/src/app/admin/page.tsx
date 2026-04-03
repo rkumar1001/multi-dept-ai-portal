@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { DEPARTMENT_CONFIG } from "@/types";
+import { DEPARTMENT_CONFIG } from "@/departments";
 import {
   BarChart,
   Bar,
@@ -207,7 +207,7 @@ export default function AdminPage() {
                       <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}K`} />
                       <Tooltip
-                        formatter={(v: number) => [`${(v / 1000).toFixed(1)}K tokens`, ""]}
+                        formatter={(v) => [`${(Number(v) / 1000).toFixed(1)}K tokens`, ""]}
                         contentStyle={{ fontSize: 12, borderRadius: 8 }}
                       />
                       <Bar dataKey="input" name="Input" fill="#60a5fa" radius={[4, 4, 0, 0]} />
@@ -234,7 +234,7 @@ export default function AdminPage() {
                         outerRadius={100}
                         innerRadius={60}
                         paddingAngle={2}
-                        label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
                         labelLine={false}
                       >
                         {pieData.map((entry, idx) => (
@@ -242,7 +242,7 @@ export default function AdminPage() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(v: number) => [`${(v / 1000).toFixed(1)}K tokens`, ""]}
+                        formatter={(v) => [`${(Number(v) / 1000).toFixed(1)}K tokens`, ""]}
                         contentStyle={{ fontSize: 12, borderRadius: 8 }}
                       />
                       <Legend />

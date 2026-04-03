@@ -75,6 +75,7 @@ async def get_conversation(
         select(Conversation).where(
             Conversation.id == conversation_id,
             Conversation.user_id == current_user.id,
+            Conversation.department == current_user.department,
         )
     )
     conversation = result.scalar_one_or_none()
