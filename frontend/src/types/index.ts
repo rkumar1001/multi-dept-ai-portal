@@ -131,7 +131,13 @@ export const DEPARTMENT_PROMPTS: Record<string, QuickPrompt[]> = {
   logistics: [
     { icon: "🗺️", label: "Fleet Overview", description: "All vehicles with live status", prompt: "Give me a summary of the entire fleet — how many vehicles are moving, idle, and stopped?" },
     { icon: "🚗", label: "Moving Vehicles", description: "Currently on the road", prompt: "Show me all vehicles that are currently moving with their speed and location." },
+    { icon: "�", label: "Stopped Vehicles", description: "Parked with engine off", prompt: "Show me all vehicles that are currently stopped with their last known locations." },
+    { icon: "🔥", label: "Idle Vehicles", description: "Engine on but stationary", prompt: "Which vehicles are currently idle with their engines running? Show locations." },
     { icon: "📍", label: "Find Nearby", description: "Vehicles near a location", prompt: "Find all vehicles within 10 km of downtown Toronto (43.65, -79.38)." },
     { icon: "⚡", label: "Speeding Alerts", description: "Vehicles over speed limit", prompt: "Show me any vehicles currently exceeding 100 km/h." },
+    { icon: "🔍", label: "Search Vehicle", description: "Find a specific vehicle", prompt: "Search for vehicle with name containing 'truck' and show its live tracking details." },
+    { icon: "📊", label: "Fleet Utilization", description: "Active vs parked ratio", prompt: "What percentage of the fleet is actively being used right now? Break down by moving, idle, and stopped." },
+    { icon: "🛣️", label: "Route Activity", description: "Vehicles by region", prompt: "Find all vehicles within 25 km of Montreal (45.50, -73.57) and show their status." },
+    { icon: "📋", label: "Full Fleet List", description: "All vehicles with details", prompt: "Show me a complete list of all vehicles with their current status, speed, and last update time." },
   ],
 };

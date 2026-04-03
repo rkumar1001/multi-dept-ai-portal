@@ -2,13 +2,90 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 :root {
-  --foreground: #171717;
-  --background: #f5f5f5;
+  --foreground: #1a1a2e;
+  --background: #f8f9fc;
+  --brand-navy: #08203E;
+  --brand-teal: #557C93;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c4cdd5; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #919eab; }
+
+/* Glass card utility */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Brand gradient text */
+.text-brand-gradient {
+  background: linear-gradient(135deg, #08203E 0%, #557C93 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Animated gradient background */
+.bg-mesh {
+  background-color: #f8f9fc;
+  background-image:
+    radial-gradient(at 40% 20%, rgba(85, 124, 147, 0.08) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(8, 32, 62, 0.06) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, rgba(85, 124, 147, 0.06) 0px, transparent 50%),
+    radial-gradient(at 80% 50%, rgba(8, 32, 62, 0.04) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(85, 124, 147, 0.06) 0px, transparent 50%);
+}
+
+/* Prose overrides for chat */
+.prose pre { border-radius: 12px; }
+.prose table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.prose table th { 
+  background: linear-gradient(135deg, #08203E, #557C93);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+.prose table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+  color: #374151;
+}
+.prose table tbody tr:hover { background: rgba(85, 124, 147, 0.03); }
+.prose table thead + tbody tr:first-child td { padding-top: 10px; }
+
+/* Alert/badge styles in chat */
+.chat-alert-banner {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.03));
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+
+/* Smooth transitions for tool cards */
+.tool-card-enter { animation: toolCardIn 0.3s ease-out; }
+@keyframes toolCardIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }

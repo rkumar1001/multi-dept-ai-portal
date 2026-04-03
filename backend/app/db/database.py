@@ -37,44 +37,32 @@ async def _seed_default_admin():
     from app.services.auth_service import hash_password
     import uuid
 
+    seed_users = [
+        {"email": "admin@gmail.com", "password": "admin", "full_name": "Restaurant Admin", "department": Department.RESTAURANT, "role": Role.ADMIN},
+        {"email": "admin1@gmail.com", "password": "admin", "full_name": "Logistics Admin", "department": Department.LOGISTICS, "role": Role.ADMIN},
+        {"email": "themasalatwist@gmail.com", "password": "oxnard", "full_name": "The Masala Twist", "department": Department.RESTAURANT, "role": Role.USER},
+        {"email": "finance@demo.com", "password": "admin", "full_name": "Finance Admin", "department": Department.FINANCE, "role": Role.ADMIN},
+        {"email": "accounting@demo.com", "password": "admin", "full_name": "Accounting Admin", "department": Department.ACCOUNTING, "role": Role.ADMIN},
+        {"email": "sales@demo.com", "password": "admin", "full_name": "Sales Admin", "department": Department.SALES, "role": Role.ADMIN},
+    ]
+
     async with async_session() as session:
-        # Seed admin@gmail.com as restaurant admin
-        result = await session.execute(select(User).where(User.email == "admin@gmail.com"))
-        if not result.scalar_one_or_none():
-            restaurant_admin = User(
-                id=str(uuid.uuid4()),
-                email="admin@gmail.com",
-                hashed_password=hash_password(settings.default_admin_password),
-                full_name="Restaurant Admin",
-                department=Department.RESTAURANT,
-                role=Role.ADMIN,
-            )
-            session.add(restaurant_admin)
-
-        # Seed admin1@gmail.com as logistics admin
-        result = await session.execute(select(User).where(User.email == "admin1@gmail.com"))
-        if not result.scalar_one_or_none():
-            logistics_admin = User(
-                id=str(uuid.uuid4()),
-                email="admin1@gmail.com",
-                hashed_password=hash_password(settings.default_admin_password),
-                full_name="Logistics Admin",
-                department=Department.LOGISTICS,
-                role=Role.ADMIN,
-            )
-            session.add(logistics_admin)
-
-        # Seed The Masala Twist restaurant user
-        result = await session.execute(select(User).where(User.email == "themasalatwist@gmail.com"))
-        if not result.scalar_one_or_none():
-            restaurant_user = User(
-                id=str(uuid.uuid4()),
-                email="themasalatwist@gmail.com",
-                hashed_password=hash_password("oxnard"),
-                full_name="The Masala Twist",
-                department=Department.RESTAURANT,
-                role=Role.USER,
-            )
-            session.add(restaurant_user)
+        for u in seed_users:
+            result = await session.execute(select(User).where(User.email == u["email"]))
+            existing = result.scalar_one_or_none()
+            if existing:
+                # Fix role / password on every boot so they stay correct
+                existing.hashed_password = hash_password(u["password"])
+                existing.role = u["role"]
+                existing.department = u["department"]
+            else:
+                session.add(User(
+                    id=str(uuid.uuid4()),
+                    email=u["email"],
+                    hashed_password=hash_password(u["password"]),
+                    full_name=u["full_name"],
+                    department=u["department"],
+                    role=u["role"],
+                ))
 
         await session.commit()

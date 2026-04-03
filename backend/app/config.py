@@ -1,5 +1,8 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -7,9 +10,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_port: int = 8000
     secret_key: str = "change-me-to-a-random-secret-key-at-least-32-chars"
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:3002"
 
-    database_url: str = "sqlite+aiosqlite:///./ai_portal.db"
+    database_url: str = f"sqlite+aiosqlite:///{Path(__file__).resolve().parent.parent / 'ai_portal.db'}"
 
     redis_url: str = "redis://localhost:6379/0"
 
@@ -30,7 +33,7 @@ class Settings(BaseSettings):
     fcm_backend_url: str = ""
     fcm_backend_secret: str = ""
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    model_config = {"env_file": str(_ENV_FILE), "extra": "ignore"}
 
 
 @lru_cache

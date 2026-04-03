@@ -109,15 +109,22 @@ export default function AdminPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f8f9fc]">
       {/* Header */}
-      <header className="border-b border-gray-200 bg-white px-6 py-4">
+      <header className="border-b border-gray-200/60 bg-white/80 backdrop-blur-sm px-6 py-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="text-sm text-gray-500">
-              Usage analytics, cost tracking & department insights
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-brand-gradient flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" viewBox="0 0 172 172" fill="none">
+                <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="currentColor" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-brand-navy">Admin Dashboard</h1>
+              <p className="text-xs text-gray-400">
+                Usage analytics, cost tracking & department insights
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
@@ -127,7 +134,7 @@ export default function AdminPage() {
                   onClick={() => loadData(d)}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                     activePeriod === d
-                      ? "bg-white shadow text-gray-900"
+                      ? "bg-white shadow text-brand-navy"
                       : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
@@ -137,7 +144,7 @@ export default function AdminPage() {
             </div>
             <button
               onClick={() => router.push("/chat")}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-teal/5 transition"
             >
               ← Back to Chat
             </button>
@@ -370,12 +377,12 @@ function SummaryCard({
   label: string; value: string; sub: string; icon: string; highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-xl p-5 shadow-sm border ${highlight ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200" : "bg-white border-gray-200"}`}>
+    <div className={`rounded-xl p-5 shadow-sm border ${highlight ? "bg-gradient-to-br from-brand-teal-pale to-blue-50 border-brand-teal/20" : "bg-white border-gray-200/60"}`}>
       <div className="flex items-center gap-2 mb-1">
         <span className="text-lg">{icon}</span>
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
       </div>
-      <p className={`text-2xl font-bold ${highlight ? "text-blue-700" : "text-gray-900"}`}>{value}</p>
+      <p className={`text-2xl font-bold ${highlight ? "text-brand-navy" : "text-brand-navy"}`}>{value}</p>
       <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
     </div>
   );
