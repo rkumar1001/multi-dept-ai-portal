@@ -9,6 +9,7 @@ build/
 
 # Backend
 backend/ai_portal.db
+ai_portal.db
 backend/.env
 
 # Node

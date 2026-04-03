@@ -5,7 +5,7 @@ function getToken(): string | null {
   return localStorage.getItem("token");
 }
 
-async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(path: string, options: RequestInit = {}, signal?: AbortSignal): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -15,7 +15,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -39,10 +39,11 @@ export const api = {
     ),
 
   // Chat
-  sendMessage: (message: string, conversation_id?: string) =>
+  sendMessage: (message: string, conversation_id?: string, signal?: AbortSignal) =>
     apiFetch<{ conversation_id: string; message: string; tool_calls?: Record<string, unknown>[] }>(
       "/api/v1/chat",
-      { method: "POST", body: JSON.stringify({ message, conversation_id }) }
+      { method: "POST", body: JSON.stringify({ message, conversation_id }) },
+      signal
     ),
 
   // Conversations
