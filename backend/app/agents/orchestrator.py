@@ -6,8 +6,7 @@ from typing import AsyncIterator
 
 import anthropic
 
-from app.agents.prompts import SYSTEM_PROMPTS
-from app.agents.tools import DEPARTMENT_TOOLS, execute_tool
+from app.agents.registry import execute_tool, get_prompt, get_tools
 from app.config import get_settings
 
 settings = get_settings()
@@ -36,11 +35,11 @@ class AgentOrchestrator:
         conversation_history: list[dict] | None = None,
     ) -> AgentResponse:
         """Process a user query through the appropriate department agent."""
-        system_prompt = SYSTEM_PROMPTS.get(department)
-        if system_prompt is None:
+        try:
+            system_prompt = get_prompt(department)
+            tools = get_tools(department)
+        except KeyError:
             return AgentResponse(content=f"Error: Unknown department '{department}'.")
-
-        tools = DEPARTMENT_TOOLS.get(department, [])
 
         # Build message history
         messages = []
@@ -113,12 +112,12 @@ class AgentOrchestrator:
         conversation_history: list[dict] | None = None,
     ) -> AsyncIterator[str]:
         """Stream a response from the department agent via SSE-compatible chunks."""
-        system_prompt = SYSTEM_PROMPTS.get(department)
-        if system_prompt is None:
+        try:
+            system_prompt = get_prompt(department)
+            tools = get_tools(department)
+        except KeyError:
             yield f"Error: Unknown department '{department}'."
             return
-
-        tools = DEPARTMENT_TOOLS.get(department, [])
 
         messages = []
         if conversation_history:

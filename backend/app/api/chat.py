@@ -115,6 +115,18 @@ async def stream_chat(
 
     conversation_history = []
     if conversation_id:
+        # Verify conversation belongs to this user and department
+        conv_result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == current_user.id,
+                Conversation.department == current_user.department,
+            )
+        )
+        if conv_result.scalar_one_or_none() is None:
+            from starlette.responses import JSONResponse
+            return JSONResponse(status_code=404, content={"detail": "Conversation not found"})
+
         history_result = await db.execute(
             select(Message)
             .where(Message.conversation_id == conversation_id)

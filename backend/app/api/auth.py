@@ -21,7 +21,6 @@ class RegisterRequest(BaseModel):
     password: str
     full_name: str
     department: Department
-    role: Role = Role.USER
 
 
 class TokenResponse(BaseModel):
@@ -50,7 +49,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     try:
-        user = await create_user(db, body.email, body.password, body.full_name, body.department, body.role)
+        user = await create_user(db, body.email, body.password, body.full_name, body.department, Role.USER)
     except Exception:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 

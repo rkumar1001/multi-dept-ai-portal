@@ -35,7 +35,7 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    return CurrentUser(id=user.id, department=payload["department"], role=payload["role"])
+    return CurrentUser(id=user.id, department=user.department.value, role=user.role.value)
 
 
 async def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
