@@ -1,9 +1,12 @@
 """Chat API routes — /api/v1/chat/*"""
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +16,7 @@ from app.agents.orchestrator import orchestrator
 from app.db.database import get_db
 from app.middleware.auth_middleware import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
+from app.services.redis_service import cache_conversation_context, get_conversation_context
 from app.services.usage_service import record_usage
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
@@ -55,14 +59,20 @@ async def send_message(
         db.add(conversation)
         await db.flush()
 
-    # Load conversation history
-    history_result = await db.execute(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at)
-    )
-    history_messages = history_result.scalars().all()
-    conversation_history = [{"role": m.role, "content": m.content} for m in history_messages]
+    # Load conversation history — try Redis cache first, fall back to DB
+    try:
+        conversation_history = await get_conversation_context(str(conversation.id))
+    except Exception:
+        logger.warning("Redis unavailable for conversation context read")
+        conversation_history = None
+    if conversation_history is None:
+        history_result = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at)
+        )
+        history_messages = history_result.scalars().all()
+        conversation_history = [{"role": m.role, "content": m.content} for m in history_messages]
 
     # Save user message
     user_msg = Message(conversation_id=conversation.id, role="user", content=body.message)
@@ -85,6 +95,16 @@ async def send_message(
         token_count=agent_response.input_tokens + agent_response.output_tokens,
     )
     db.add(assistant_msg)
+
+    # Update conversation context cache
+    updated_history = conversation_history + [
+        {"role": "user", "content": body.message},
+        {"role": "assistant", "content": agent_response.content},
+    ]
+    try:
+        await cache_conversation_context(str(conversation.id), updated_history)
+    except Exception:
+        logger.warning("Redis unavailable for conversation context write")
 
     # Record usage
     await record_usage(

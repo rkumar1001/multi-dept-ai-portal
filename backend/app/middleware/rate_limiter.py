@@ -1,15 +1,15 @@
-import time
-from collections import defaultdict
+import json
+import logging
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from app.config import get_settings
+from app.services.redis_service import check_rate_limit
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
-
-# In-memory rate limit store; in production use Redis
-_rate_store: dict[str, list[float]] = defaultdict(list)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -19,23 +19,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
-        key = f"{client_ip}:{request.url.path}"
-        now = time.time()
-        window = 60  # 1 minute window
-
-        # Clean old entries
-        _rate_store[key] = [t for t in _rate_store[key] if now - t < window]
+        key = f"rl:{client_ip}:{request.url.path}"
 
         limit = settings.rate_limit_admin if "/admin" in request.url.path else settings.rate_limit_default
 
-        if len(_rate_store[key]) >= limit:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Rate limit exceeded. Try again later.",
+        try:
+            allowed, remaining = await check_rate_limit(key, limit, window=60)
+        except Exception:
+            # If Redis is down, fail open — allow the request
+            logger.warning("Redis unavailable for rate limiting, allowing request")
+            return await call_next(request)
+
+        if not allowed:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Try again later."},
+                headers={
+                    "X-RateLimit-Limit": str(limit),
+                    "X-RateLimit-Remaining": "0",
+                },
             )
 
-        _rate_store[key].append(now)
         response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(limit)
-        response.headers["X-RateLimit-Remaining"] = str(limit - len(_rate_store[key]))
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response

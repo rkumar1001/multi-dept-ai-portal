@@ -9,6 +9,7 @@ from app.api import auth, chat, conversations, admin
 from app.config import get_settings
 from app.db.database import init_db
 from app.middleware.rate_limiter import RateLimitMiddleware
+from app.services.redis_service import close_redis, redis_ping
 
 settings = get_settings()
 
@@ -17,6 +18,7 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     await init_db()
     yield
+    await close_redis()
 
 
 app = FastAPI(
@@ -47,4 +49,9 @@ app.include_router(admin.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": settings.app_name}
+    redis_ok = await redis_ping()
+    return {
+        "status": "healthy" if redis_ok else "degraded",
+        "service": settings.app_name,
+        "redis": "connected" if redis_ok else "unavailable",
+    }

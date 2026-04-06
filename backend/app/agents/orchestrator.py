@@ -1,6 +1,8 @@
 """Agent orchestrator — routes queries to department-specific agents via Claude API."""
 
+import hashlib
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
@@ -8,8 +10,13 @@ import anthropic
 
 from app.agents.registry import execute_tool, get_prompt, get_tools
 from app.config import get_settings
+from app.services.redis_service import cache_get, cache_set
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Departments whose tool results come from live APIs and benefit from short-TTL caching
+_CACHEABLE_DEPARTMENTS = {"logistics", "restaurant"}
 
 
 @dataclass
@@ -76,7 +83,27 @@ class AgentOrchestrator:
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":
-                        tool_result = await execute_tool(department, block.name, block.input)
+                        # Try cache for cacheable departments
+                        tool_result = None
+                        cache_key = None
+                        if department in _CACHEABLE_DEPARTMENTS:
+                            raw = json.dumps({"d": department, "t": block.name, "i": block.input}, sort_keys=True)
+                            cache_key = f"tool:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
+                            try:
+                                tool_result = await cache_get(cache_key)
+                                if tool_result is not None:
+                                    logger.debug("Cache hit for %s/%s", department, block.name)
+                            except Exception:
+                                logger.warning("Redis unavailable for tool cache read, skipping")
+
+                        if tool_result is None:
+                            tool_result = await execute_tool(department, block.name, block.input)
+                            if cache_key is not None:
+                                try:
+                                    await cache_set(cache_key, tool_result, ttl=30)
+                                except Exception:
+                                    logger.warning("Redis unavailable for tool cache write, skipping")
+
                         all_tool_calls.append({
                             "tool": block.name,
                             "input": block.input,

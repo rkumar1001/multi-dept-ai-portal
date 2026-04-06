@@ -38,6 +38,14 @@ export const api = {
       { method: "POST", body: JSON.stringify(data) }
     ),
 
+  logout: async () => {
+    try {
+      await apiFetch<void>("/api/v1/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore errors — clear local state regardless
+    }
+  },
+
   // Chat
   sendMessage: (message: string, conversation_id?: string, signal?: AbortSignal) =>
     apiFetch<{ conversation_id: string; message: string; tool_calls?: Record<string, unknown>[] }>(
