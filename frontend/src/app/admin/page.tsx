@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { DEPARTMENT_CONFIG } from "@/departments";
@@ -42,6 +42,14 @@ const COST_PER_1K_INPUT = 0.003;
 const COST_PER_1K_OUTPUT = 0.015;
 
 export default function AdminPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <AdminPageContent />
+    </Suspense>
+  );
+}
+
+function AdminPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [usage, setUsage] = useState<UsageItem[]>([]);
@@ -50,6 +58,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [activePeriod, setActivePeriod] = useState(30);
   const [emailStatus, setEmailStatus] = useState<Record<string, { provider: string; email_address: string; is_active: boolean }>>({});
+  const [slackStatus, setSlackStatus] = useState<Record<string, { team_name: string; team_id: string; is_active: boolean }>>({});
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -59,10 +68,16 @@ export default function AdminPage() {
     }
     loadData(30);
     loadEmailStatus();
+    loadSlackStatus();
     // Handle OAuth callback redirect
-    const connected = searchParams.get("email_connected");
-    if (connected) {
+    const emailConnected = searchParams.get("email_connected");
+    const slackConnected = searchParams.get("slack_connected");
+    if (emailConnected) {
       loadEmailStatus();
+      window.history.replaceState({}, "", "/admin");
+    }
+    if (slackConnected) {
+      loadSlackStatus();
       window.history.replaceState({}, "", "/admin");
     }
   }, [router, searchParams]);
@@ -80,12 +95,48 @@ export default function AdminPage() {
     }
   };
 
+  const loadSlackStatus = async () => {
+    try {
+      const statuses = await api.getAllSlackStatus();
+      const map: Record<string, { team_name: string; team_id: string; is_active: boolean }> = {};
+      for (const s of statuses) {
+        map[s.department] = { team_name: s.team_name, team_id: s.team_id, is_active: s.is_active };
+      }
+      setSlackStatus(map);
+    } catch {
+      // ignore
+    }
+  };
+
   const handleConnectEmail = async (dept: string, provider: string) => {
     try {
       const { auth_url } = await api.connectDepartmentEmail(dept, provider);
       window.location.href = auth_url;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to connect email");
+    }
+  };
+
+  const handleConnectSlack = async (dept: string) => {
+    try {
+      const { auth_url } = await api.connectDepartmentSlack(dept);
+      window.location.href = auth_url;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to connect Slack");
+    }
+  };
+
+  const handleDisconnectSlack = async (dept: string) => {
+    if (!confirm(`Disconnect Slack for ${DEPARTMENT_CONFIG[dept]?.label || dept}? The AI agent will lose Slack access.`)) return;
+    try {
+      await api.disconnectDepartmentSlack(dept);
+      setSlackStatus((prev) => {
+        const next = { ...prev };
+        delete next[dept];
+        return next;
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect Slack");
     }
   };
 
@@ -404,27 +455,27 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Email Integration */}
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Email Integration</h2>
+            {/* Slack Integration */}
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Slack Integration</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
               {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
                 const cfg = DEPARTMENT_CONFIG[dept];
-                const email = emailStatus[dept];
+                const slack = slackStatus[dept];
                 return (
                   <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-xl">{cfg?.icon}</span>
                       <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
                     </div>
-                    {email ? (
+                    {slack ? (
                       <div>
                         <div className="flex items-center gap-1.5 mb-2">
                           <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs font-medium text-green-700 capitalize">{email.provider}</span>
+                          <span className="text-xs font-medium text-green-700">Connected</span>
                         </div>
-                        <p className="text-xs text-gray-500 truncate mb-3" title={email.email_address}>{email.email_address}</p>
+                        <p className="text-xs text-gray-500 truncate mb-3" title={slack.team_name}>{slack.team_name}</p>
                         <button
-                          onClick={() => handleDisconnectEmail(dept)}
+                          onClick={() => handleDisconnectSlack(dept)}
                           className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
                         >
                           Disconnect
@@ -433,20 +484,12 @@ export default function AdminPage() {
                     ) : (
                       <div>
                         <p className="text-xs text-gray-400 mb-3">Not connected</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleConnectEmail(dept, "gmail")}
-                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            Gmail
-                          </button>
-                          <button
-                            onClick={() => handleConnectEmail(dept, "outlook")}
-                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            Outlook
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleConnectSlack(dept)}
+                          className="w-full text-xs py-1.5 rounded-lg border border-[#4A154B] text-[#4A154B] hover:bg-[#4A154B] hover:text-white transition"
+                        >
+                          Connect Slack
+                        </button>
                       </div>
                     )}
                   </div>

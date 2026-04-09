@@ -21,6 +21,9 @@ async function apiFetch<T>(path: string, options: RequestInit = {}, signal?: Abo
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail || `API error: ${res.status}`);
   }
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
   return res.json();
 }
 
@@ -37,6 +40,9 @@ export const api = {
       "/api/v1/auth/register",
       { method: "POST", body: JSON.stringify(data) }
     ),
+
+  logout: () =>
+    apiFetch<void>("/api/v1/auth/logout", { method: "POST" }),
 
   // Chat
   sendMessage: (message: string, conversation_id?: string, signal?: AbortSignal) =>
@@ -96,6 +102,28 @@ export const api = {
   disconnectDepartmentEmail: (department: string) =>
     apiFetch<{ status: string; department: string }>(
       `/api/v1/email/disconnect/${department}`,
+      { method: "DELETE" }
+    ),
+
+  // Slack
+  getSlackStatus: (department: string) =>
+    apiFetch<{ department: string; team_name: string; team_id: string; is_active: boolean; connected_at: string }>(
+      `/api/v1/slack/status/${department}`
+    ),
+
+  getAllSlackStatus: () =>
+    apiFetch<{ department: string; team_name: string; team_id: string; is_active: boolean; connected_at: string }[]>(
+      "/api/v1/slack/status"
+    ),
+
+  connectDepartmentSlack: (department: string) =>
+    apiFetch<{ auth_url: string }>(
+      `/api/v1/slack/connect/${department}`
+    ),
+
+  disconnectDepartmentSlack: (department: string) =>
+    apiFetch<{ status: string; department: string }>(
+      `/api/v1/slack/disconnect/${department}`,
       { method: "DELETE" }
     ),
 };

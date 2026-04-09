@@ -30,9 +30,12 @@ export interface QuickPrompt {
 export interface Integration {
   id: string;
   name: string;
-  icon: React.ReactNode;
+  icon: string | null;
   active: boolean;
   department: string;
   connected: boolean;
   color: string;
+  oauthRequired?: boolean;  // true = needs admin OAuth (Slack, Email)
+  connectType?: "slack" | "gmail" | "outlook";
+
 }

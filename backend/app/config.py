@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     microsoft_redirect_uri: str = "http://localhost:8000/api/v1/email/callback/outlook"
     microsoft_tenant_id: str = "common"
 
+    # Slack OAuth
+    slack_client_id: str = ""
+    slack_client_secret: str = ""
+    slack_redirect_uri: str = "http://localhost:8000/api/v1/slack/callback"
+
     model_config = {"env_file": str(_ENV_FILE), "extra": "ignore"}
 
 

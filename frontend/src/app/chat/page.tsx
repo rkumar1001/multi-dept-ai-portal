@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Link from "next/link";
@@ -505,8 +505,19 @@ function MessageActions({ content }: { content: string }) {
 
 /* ── Main Chat Page ───────────────────────────────────────────────────── */
 
+import { Suspense } from "react";
+
 export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#f8f9fc]" />}>
+      <ChatPageContent />
+    </Suspense>
+  );
+}
+
+function ChatPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [department, setDepartment] = useState("");
   const [fullName, setFullName] = useState("");
@@ -535,18 +546,32 @@ export default function ChatPage() {
     setFullName(localStorage.getItem("fullName") || "");
     setRole(localStorage.getItem("role") || "");
     setIntegrations(getIntegrations(dept));
-    // Check if department has email connected
+    // Check email connection status — mark connected provider active, others inactive
     api.getEmailStatus(dept).then((status) => {
       setIntegrations((prev) =>
         prev.map((integ) =>
-          integ.id === status.provider
-            ? { ...integ, active: true, connected: true }
-            : integ.id === "gmail" || integ.id === "outlook"
-              ? { ...integ, active: false, connected: false }
-              : integ
+          integ.connectType === "gmail" || integ.connectType === "outlook"
+            ? integ.connectType === status.provider
+              ? { ...integ, active: true, connected: true }
+              : { ...integ, active: false, connected: false }
+            : integ
         )
       );
-    }).catch(() => { /* no email configured */ });
+    }).catch(() => { /* no email configured — leave as inactive */ });
+    // Check Slack connection status
+    api.getSlackStatus(dept).then(() => {
+      setIntegrations((prev) =>
+        prev.map((integ) =>
+          integ.connectType === "slack"
+            ? { ...integ, active: true, connected: true }
+            : integ
+        )
+      );
+    }).catch(() => { /* Slack not connected */ });
+    // Clear slack_connected param from URL after OAuth redirect
+    if (searchParams.get("slack_connected")) {
+      window.history.replaceState({}, "", "/chat");
+    }
     loadConversations();
     const h = new Date().getHours();
     setGreeting(h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening");
@@ -675,7 +700,7 @@ export default function ChatPage() {
   };
 
   const handleLogout = async () => {
-    await api.logout();
+    try { await api.logout(); } catch {}
     localStorage.clear();
     router.push("/");
   };
@@ -734,36 +759,84 @@ export default function ChatPage() {
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Integrations</p>
 
             {/* Active */}
-            {activeIntegrations.map((integ) => (
-              <div
-                key={integ.id}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1 bg-brand-teal/5 border border-brand-teal/10"
-              >
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: integ.color }}>
-                  {integ.icon}
+            {activeIntegrations.map((integ) => {
+              const canDisconnect = integ.oauthRequired && role === "admin";
+              return (
+                <div
+                  key={integ.id}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1 bg-brand-teal/5 border border-brand-teal/10 group"
+                >
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{ background: integ.color }}>
+                    {integ.icon}
+                  </div>
+                  <span className="text-sm font-medium text-brand-navy flex-1">{integ.name}</span>
+                  {canDisconnect ? (
+                    <button
+                      title="Disconnect"
+                      onClick={async () => {
+                        if (!confirm(`Disconnect ${integ.name} from ${department}?`)) return;
+                        try {
+                          if (integ.connectType === "slack") await api.disconnectDepartmentSlack(department);
+                          else if (integ.connectType === "gmail" || integ.connectType === "outlook") await api.disconnectDepartmentEmail(department);
+                          setIntegrations((prev) => prev.map((i) => i.id === integ.id && i.department === integ.department ? { ...i, active: false, connected: false } : i));
+                        } catch { /* ignore */ }
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                    </svg>
+                  )}
                 </div>
-                <span className="text-sm font-medium text-brand-navy flex-1">{integ.name}</span>
-                <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-                </svg>
-              </div>
-            ))}
+              );
+            })}
 
-            {/* Locked */}
-            {lockedIntegrations.map((integ) => (
-              <div
-                key={integ.id}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1 opacity-40 cursor-not-allowed"
-              >
-                <div className="w-8 h-8 rounded-lg bg-gray-200 flex items-center justify-center text-gray-400">
-                  {integ.icon}
+            {/* Not connected */}
+            {lockedIntegrations.map((integ) => {
+              const canConnect = integ.oauthRequired && role === "admin";
+              return (
+                <div key={integ.id} className="mb-1">
+                  {canConnect ? (
+                    // Admin: show Connect button
+                    <button
+                      onClick={async () => {
+                        try {
+                          if (integ.connectType === "slack") {
+                            const { auth_url } = await api.connectDepartmentSlack(department);
+                            window.location.href = auth_url;
+                          }
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 border border-dashed border-gray-300 hover:border-brand-teal/50 hover:bg-brand-teal/5 transition group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-brand-teal/10 flex items-center justify-center text-base text-gray-400 transition">
+                        {integ.icon}
+                      </div>
+                      <span className="text-sm text-gray-400 group-hover:text-brand-teal flex-1 text-left transition">{integ.name}</span>
+                      <span className="text-[10px] font-semibold text-brand-teal bg-brand-teal/10 rounded-full px-2 py-0.5">Connect</span>
+                    </button>
+                  ) : (
+                    // Regular user: locked
+                    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 opacity-40 cursor-not-allowed">
+                      <div className="w-8 h-8 rounded-lg bg-gray-200 flex items-center justify-center text-gray-400 text-base">
+                        {integ.icon}
+                      </div>
+                      <span className="text-sm text-gray-400 flex-1">{integ.name}</span>
+                      <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
-                <span className="text-sm text-gray-400 flex-1">{integ.name}</span>
-                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                </svg>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Search + History */}
