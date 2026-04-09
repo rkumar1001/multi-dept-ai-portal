@@ -12,6 +12,7 @@ from app.departments.restaurant import tools as restaurant_tools
 from app.departments.restaurant import prompts as restaurant_prompts
 from app.departments.logistics import tools as logistics_tools
 from app.departments.logistics import prompts as logistics_prompts
+from app.departments.common.email_tools import EMAIL_TOOLS, is_email_tool  # noqa: F401 — re-exported
 
 _REGISTRY: dict[str, dict] = {
     "sales": {"tools": sales_tools.TOOLS, "prompt": sales_prompts.SYSTEM_PROMPT, "execute": sales_tools.execute_tool},
@@ -28,7 +29,7 @@ def get_tools(department: str) -> list[dict]:
     entry = _REGISTRY.get(department)
     if entry is None:
         raise KeyError(f"Unknown department: {department}")
-    return entry["tools"]
+    return entry["tools"] + EMAIL_TOOLS
 
 
 def get_prompt(department: str) -> str:

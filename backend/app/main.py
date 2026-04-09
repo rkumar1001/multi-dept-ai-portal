@@ -5,10 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, chat, conversations, admin
+from app.api import auth, chat, conversations, admin, email
 from app.config import get_settings
 from app.db.database import init_db
-from app.middleware.rate_limiter import RateLimitMiddleware
 
 settings = get_settings()
 
@@ -35,14 +34,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rate limiting
-app.add_middleware(RateLimitMiddleware)
-
 # Routes
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(conversations.router)
 app.include_router(admin.router)
+app.include_router(email.router)
 
 
 @app.get("/health")

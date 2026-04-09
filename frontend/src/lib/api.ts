@@ -76,4 +76,26 @@ export const api = {
     apiFetch<{ departments: { department: string; kpis: { label: string; value: string; trend: string; trend_direction: "up" | "down" | "flat" }[] }[] }>(
       "/api/v1/admin/insights"
     ),
+
+  // Email
+  getEmailStatus: (department: string) =>
+    apiFetch<{ department: string; provider: string; email_address: string; is_active: boolean; connected_at: string }>(
+      `/api/v1/email/status/${department}`
+    ),
+
+  getAllEmailStatus: () =>
+    apiFetch<{ department: string; provider: string; email_address: string; is_active: boolean; connected_at: string }[]>(
+      "/api/v1/email/status"
+    ),
+
+  connectDepartmentEmail: (department: string, provider: string) =>
+    apiFetch<{ auth_url: string }>(
+      `/api/v1/email/connect/${department}/${provider}`
+    ),
+
+  disconnectDepartmentEmail: (department: string) =>
+    apiFetch<{ status: string; department: string }>(
+      `/api/v1/email/disconnect/${department}`,
+      { method: "DELETE" }
+    ),
 };

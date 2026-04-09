@@ -17,7 +17,7 @@ export function getIntegrations(userDept: string): Integration[] {
       icon: null,
       active: false,
       department: "logistics",
-      connected: false,
+      connected: true,
       color: "#14b8a6",
     },
     {

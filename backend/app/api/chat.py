@@ -1,15 +1,18 @@
 """Chat API routes — /api/v1/chat/*"""
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.agents.orchestrator import orchestrator
+from app.agents.orchestrator import get_orchestrator
 from app.db.database import get_db
 from app.middleware.auth_middleware import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
@@ -55,7 +58,7 @@ async def send_message(
         db.add(conversation)
         await db.flush()
 
-    # Load conversation history
+    # Load conversation history from DB
     history_result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation.id)
@@ -70,10 +73,11 @@ async def send_message(
     await db.flush()
 
     # Process through agent orchestrator
-    agent_response = await orchestrator.process_query(
+    agent_response = await get_orchestrator().process_query(
         department=current_user.department,
         user_message=body.message,
         conversation_history=conversation_history,
+        db=db,
     )
 
     # Save assistant message
@@ -136,10 +140,11 @@ async def stream_chat(
         conversation_history = [{"role": m.role, "content": m.content} for m in history_messages]
 
     async def event_generator():
-        async for chunk in orchestrator.stream_query(
+        async for chunk in get_orchestrator().stream_query(
             department=current_user.department,
             user_message=message,
             conversation_history=conversation_history,
+            db=db,
         ):
             yield {"event": "message", "data": json.dumps({"content": chunk})}
         yield {"event": "done", "data": json.dumps({"status": "complete"})}

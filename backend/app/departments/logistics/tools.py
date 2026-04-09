@@ -1,6 +1,7 @@
 """Logistics department tool definitions and execution logic.
 
-Uses real FleetHunt GPS API for live fleet tracking.
+Uses real FleetHunt GPS API for live fleet tracking
+and Samsara API for comprehensive fleet management.
 """
 
 import math
@@ -10,12 +11,9 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
+from app.departments.logistics.samsara_tools import SAMSARA_TOOLS, execute_samsara_tool
 
-_settings = get_settings()
-FLEETHUNT_BASE_URL = _settings.fleethunt_base_url
-FLEETHUNT_API_KEY = _settings.fleethunt_api_key
-
-TOOLS = [
+FLEETHUNT_TOOLS = [
     {
         "name": "get_fleet_location",
         "description": "Get the current location and status of all vehicles in the fleet.",
@@ -120,16 +118,19 @@ TOOLS = [
     },
 ]
 
+TOOLS = FLEETHUNT_TOOLS + SAMSARA_TOOLS
+
 
 # ── FleetHunt API helpers ──────────────────────────────────────────────────
 
 
 async def _fleethunt_get_fleet() -> list[dict]:
     """Fetch all devices from FleetHunt API."""
+    settings = get_settings()
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         resp = await client.get(
-            f"{FLEETHUNT_BASE_URL}/fleet",
-            params={"api_token": FLEETHUNT_API_KEY},
+            f"{settings.fleethunt_base_url}/fleet",
+            params={"api_token": settings.fleethunt_api_key},
         )
         resp.raise_for_status()
         data = resp.json()
@@ -140,10 +141,11 @@ async def _fleethunt_get_fleet() -> list[dict]:
 
 async def _fleethunt_get_device(device_id: str) -> dict | None:
     """Fetch a single device by ID from FleetHunt API."""
+    settings = get_settings()
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         resp = await client.get(
-            f"{FLEETHUNT_BASE_URL}/fleet",
-            params={"api_token": FLEETHUNT_API_KEY, "device_id": device_id},
+            f"{settings.fleethunt_base_url}/fleet",
+            params={"api_token": settings.fleethunt_api_key, "device_id": device_id},
         )
         resp.raise_for_status()
         data = resp.json()
@@ -212,7 +214,9 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
-    """Execute a logistics tool against the real FleetHunt API."""
+    """Execute a logistics tool against FleetHunt or Samsara API."""
+    if tool_name.startswith("samsara_"):
+        return await execute_samsara_tool(tool_name, tool_input)
     try:
         if tool_name == "get_fleet_location":
             devices = await _fleethunt_get_active_fleet()

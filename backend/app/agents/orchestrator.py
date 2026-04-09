@@ -1,14 +1,17 @@
 """Agent orchestrator — routes queries to department-specific agents via Claude API."""
 
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
 import anthropic
 
-from app.agents.registry import execute_tool, get_prompt, get_tools
+from app.agents.registry import execute_tool, get_prompt, get_tools, is_email_tool
 from app.config import get_settings
+from app.departments.common.email_tools import execute_email_tool
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -33,6 +36,7 @@ class AgentOrchestrator:
         department: str,
         user_message: str,
         conversation_history: list[dict] | None = None,
+        db: "AsyncSession | None" = None,
     ) -> AgentResponse:
         """Process a user query through the appropriate department agent."""
         try:
@@ -76,7 +80,12 @@ class AgentOrchestrator:
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":
-                        tool_result = await execute_tool(department, block.name, block.input)
+                        # Email tools
+                        if is_email_tool(block.name) and db is not None:
+                            tool_result = await execute_email_tool(block.name, block.input, department, db)
+                        else:
+                            tool_result = await execute_tool(department, block.name, block.input)
+
                         all_tool_calls.append({
                             "tool": block.name,
                             "input": block.input,
@@ -110,6 +119,7 @@ class AgentOrchestrator:
         department: str,
         user_message: str,
         conversation_history: list[dict] | None = None,
+        db: "AsyncSession | None" = None,
     ) -> AsyncIterator[str]:
         """Stream a response from the department agent via SSE-compatible chunks."""
         try:
@@ -139,5 +149,12 @@ class AgentOrchestrator:
                 yield text
 
 
-# Singleton
-orchestrator = AgentOrchestrator()
+# Lazy singleton
+_orchestrator: AgentOrchestrator | None = None
+
+
+def get_orchestrator() -> AgentOrchestrator:
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = AgentOrchestrator()
+    return _orchestrator

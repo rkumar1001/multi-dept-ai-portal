@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { DEPARTMENT_CONFIG } from "@/departments";
 import {
@@ -43,11 +43,13 @@ const COST_PER_1K_OUTPUT = 0.015;
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [usage, setUsage] = useState<UsageItem[]>([]);
   const [insights, setInsights] = useState<InsightsData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activePeriod, setActivePeriod] = useState(30);
+  const [emailStatus, setEmailStatus] = useState<Record<string, { provider: string; email_address: string; is_active: boolean }>>({});
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -56,7 +58,50 @@ export default function AdminPage() {
       return;
     }
     loadData(30);
-  }, [router]);
+    loadEmailStatus();
+    // Handle OAuth callback redirect
+    const connected = searchParams.get("email_connected");
+    if (connected) {
+      loadEmailStatus();
+      window.history.replaceState({}, "", "/admin");
+    }
+  }, [router, searchParams]);
+
+  const loadEmailStatus = async () => {
+    try {
+      const statuses = await api.getAllEmailStatus();
+      const map: Record<string, { provider: string; email_address: string; is_active: boolean }> = {};
+      for (const s of statuses) {
+        map[s.department] = { provider: s.provider, email_address: s.email_address, is_active: s.is_active };
+      }
+      setEmailStatus(map);
+    } catch {
+      // ignore — user may not be admin or endpoint may fail
+    }
+  };
+
+  const handleConnectEmail = async (dept: string, provider: string) => {
+    try {
+      const { auth_url } = await api.connectDepartmentEmail(dept, provider);
+      window.location.href = auth_url;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to connect email");
+    }
+  };
+
+  const handleDisconnectEmail = async (dept: string) => {
+    if (!confirm(`Disconnect email for ${DEPARTMENT_CONFIG[dept]?.label || dept}? The AI agent will lose email access.`)) return;
+    try {
+      await api.disconnectDepartmentEmail(dept);
+      setEmailStatus((prev) => {
+        const next = { ...prev };
+        delete next[dept];
+        return next;
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect email");
+    }
+  };
 
   const loadData = async (days: number) => {
     setLoading(true);
@@ -109,22 +154,15 @@ export default function AdminPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-[#f8f9fc]">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="border-b border-gray-200/60 bg-white/80 backdrop-blur-sm px-6 py-4">
+      <header className="border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-brand-gradient flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" viewBox="0 0 172 172" fill="none">
-                <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="currentColor" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-brand-navy">Admin Dashboard</h1>
-              <p className="text-xs text-gray-400">
-                Usage analytics, cost tracking & department insights
-              </p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-sm text-gray-500">
+              Usage analytics, cost tracking & department insights
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
@@ -134,7 +172,7 @@ export default function AdminPage() {
                   onClick={() => loadData(d)}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                     activePeriod === d
-                      ? "bg-white shadow text-brand-navy"
+                      ? "bg-white shadow text-gray-900"
                       : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
@@ -144,7 +182,7 @@ export default function AdminPage() {
             </div>
             <button
               onClick={() => router.push("/chat")}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-teal/5 transition"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               ← Back to Chat
             </button>
@@ -281,6 +319,56 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Email Integration */}
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Email Integration</h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
+              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                const cfg = DEPARTMENT_CONFIG[dept];
+                const email = emailStatus[dept];
+                return (
+                  <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl">{cfg?.icon}</span>
+                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                    </div>
+                    {email ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <span className="text-xs font-medium text-green-700 capitalize">{email.provider}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate mb-3" title={email.email_address}>{email.email_address}</p>
+                        <button
+                          onClick={() => handleDisconnectEmail(dept)}
+                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleConnectEmail(dept, "gmail")}
+                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                          >
+                            Gmail
+                          </button>
+                          <button
+                            onClick={() => handleConnectEmail(dept, "outlook")}
+                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                          >
+                            Outlook
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
             {/* Department KPI Insights */}
             {insights.length > 0 && (
               <div className="mb-8">
@@ -315,6 +403,56 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {/* Email Integration */}
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Email Integration</h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
+              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                const cfg = DEPARTMENT_CONFIG[dept];
+                const email = emailStatus[dept];
+                return (
+                  <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl">{cfg?.icon}</span>
+                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                    </div>
+                    {email ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <span className="text-xs font-medium text-green-700 capitalize">{email.provider}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate mb-3" title={email.email_address}>{email.email_address}</p>
+                        <button
+                          onClick={() => handleDisconnectEmail(dept)}
+                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleConnectEmail(dept, "gmail")}
+                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                          >
+                            Gmail
+                          </button>
+                          <button
+                            onClick={() => handleConnectEmail(dept, "outlook")}
+                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                          >
+                            Outlook
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             {/* Department Detail Cards */}
             <h2 className="mb-4 text-lg font-semibold text-gray-900">Department Breakdown</h2>
@@ -377,12 +515,12 @@ function SummaryCard({
   label: string; value: string; sub: string; icon: string; highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-xl p-5 shadow-sm border ${highlight ? "bg-gradient-to-br from-brand-teal-pale to-blue-50 border-brand-teal/20" : "bg-white border-gray-200/60"}`}>
+    <div className={`rounded-xl p-5 shadow-sm border ${highlight ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200" : "bg-white border-gray-200"}`}>
       <div className="flex items-center gap-2 mb-1">
         <span className="text-lg">{icon}</span>
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
       </div>
-      <p className={`text-2xl font-bold ${highlight ? "text-brand-navy" : "text-brand-navy"}`}>{value}</p>
+      <p className={`text-2xl font-bold ${highlight ? "text-blue-700" : "text-gray-900"}`}>{value}</p>
       <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
     </div>
   );

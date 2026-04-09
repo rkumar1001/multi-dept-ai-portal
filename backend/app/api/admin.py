@@ -14,6 +14,20 @@ from app.models.usage import DepartmentBudget, UsageRecord
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 
+async def _get_current_month_usage(db: AsyncSession, dept: str) -> tuple[int, int]:
+    """Return (total_tokens, total_tool_calls) for a department in the current month."""
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(
+        select(
+            func.coalesce(func.sum(UsageRecord.input_tokens + UsageRecord.output_tokens), 0).label("tokens"),
+            func.coalesce(func.sum(UsageRecord.tool_calls_count), 0).label("tools"),
+        )
+        .where(UsageRecord.department == dept, UsageRecord.created_at >= month_start)
+    )
+    row = result.one()
+    return int(row.tokens), int(row.tools)
+
+
 class DepartmentUsage(BaseModel):
     department: str
     total_input_tokens: int
@@ -100,18 +114,7 @@ async def get_department_config(
     if budget is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No budget config for '{dept}'")
 
-    # Current month usage
-    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    usage_result = await db.execute(
-        select(
-            func.coalesce(func.sum(UsageRecord.input_tokens + UsageRecord.output_tokens), 0).label("tokens"),
-            func.coalesce(func.sum(UsageRecord.tool_calls_count), 0).label("tools"),
-        )
-        .where(UsageRecord.department == dept, UsageRecord.created_at >= month_start)
-    )
-    usage_row = usage_result.one()
-
-    token_usage = int(usage_row.tokens)
+    token_usage, tool_call_usage = await _get_current_month_usage(db, dept)
     usage_pct = (token_usage / budget.monthly_token_limit * 100) if budget.monthly_token_limit > 0 else 0
 
     return BudgetResponse(
@@ -121,7 +124,7 @@ async def get_department_config(
         max_concurrent_users=budget.max_concurrent_users,
         alert_threshold_pct=budget.alert_threshold_pct,
         current_token_usage=token_usage,
-        current_tool_call_usage=int(usage_row.tools),
+        current_tool_call_usage=tool_call_usage,
         usage_pct=round(usage_pct, 1),
     )
 
@@ -154,17 +157,7 @@ async def update_department_config(
 
     await db.flush()
 
-    # Return with usage (same logic as GET)
-    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    usage_result = await db.execute(
-        select(
-            func.coalesce(func.sum(UsageRecord.input_tokens + UsageRecord.output_tokens), 0).label("tokens"),
-            func.coalesce(func.sum(UsageRecord.tool_calls_count), 0).label("tools"),
-        )
-        .where(UsageRecord.department == dept, UsageRecord.created_at >= month_start)
-    )
-    usage_row = usage_result.one()
-    token_usage = int(usage_row.tokens)
+    token_usage, tool_call_usage = await _get_current_month_usage(db, dept)
     usage_pct = (token_usage / budget.monthly_token_limit * 100) if budget.monthly_token_limit > 0 else 0
 
     return BudgetResponse(
@@ -174,7 +167,7 @@ async def update_department_config(
         max_concurrent_users=budget.max_concurrent_users,
         alert_threshold_pct=budget.alert_threshold_pct,
         current_token_usage=token_usage,
-        current_tool_call_usage=int(usage_row.tools),
+        current_tool_call_usage=tool_call_usage,
         usage_pct=round(usage_pct, 1),
     )
 
