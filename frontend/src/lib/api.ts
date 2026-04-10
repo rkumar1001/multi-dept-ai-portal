@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -124,6 +124,28 @@ export const api = {
   disconnectDepartmentSlack: (department: string) =>
     apiFetch<{ status: string; department: string }>(
       `/api/v1/slack/disconnect/${department}`,
+      { method: "DELETE" }
+    ),
+
+  // QuickBooks
+  getQuickBooksStatus: (department: string) =>
+    apiFetch<{ department: string; realm_id: string; company_name: string | null; is_active: boolean; connected_at: string }>(
+      `/api/v1/quickbooks/status/${department}`
+    ),
+
+  getAllQuickBooksStatus: () =>
+    apiFetch<{ department: string; realm_id: string; company_name: string | null; is_active: boolean; connected_at: string }[]>(
+      "/api/v1/quickbooks/status"
+    ),
+
+  connectDepartmentQuickBooks: (department: string) =>
+    apiFetch<{ auth_url: string }>(
+      `/api/v1/quickbooks/connect/${department}`
+    ),
+
+  disconnectDepartmentQuickBooks: (department: string) =>
+    apiFetch<{ status: string; department: string }>(
+      `/api/v1/quickbooks/disconnect/${department}`,
       { method: "DELETE" }
     ),
 };

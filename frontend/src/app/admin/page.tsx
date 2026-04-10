@@ -59,6 +59,7 @@ function AdminPageContent() {
   const [activePeriod, setActivePeriod] = useState(30);
   const [emailStatus, setEmailStatus] = useState<Record<string, { provider: string; email_address: string; is_active: boolean }>>({});
   const [slackStatus, setSlackStatus] = useState<Record<string, { team_name: string; team_id: string; is_active: boolean }>>({});
+  const [qbStatus, setQbStatus] = useState<Record<string, { realm_id: string; company_name: string | null; is_active: boolean }>>({});
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -69,15 +70,21 @@ function AdminPageContent() {
     loadData(30);
     loadEmailStatus();
     loadSlackStatus();
+    loadQbStatus();
     // Handle OAuth callback redirect
     const emailConnected = searchParams.get("email_connected");
     const slackConnected = searchParams.get("slack_connected");
+    const qbConnected = searchParams.get("quickbooks_connected");
     if (emailConnected) {
       loadEmailStatus();
       window.history.replaceState({}, "", "/admin");
     }
     if (slackConnected) {
       loadSlackStatus();
+      window.history.replaceState({}, "", "/admin");
+    }
+    if (qbConnected) {
+      loadQbStatus();
       window.history.replaceState({}, "", "/admin");
     }
   }, [router, searchParams]);
@@ -151,6 +158,42 @@ function AdminPageContent() {
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to disconnect email");
+    }
+  };
+
+  const loadQbStatus = async () => {
+    try {
+      const statuses = await api.getAllQuickBooksStatus();
+      const map: Record<string, { realm_id: string; company_name: string | null; is_active: boolean }> = {};
+      for (const s of statuses) {
+        map[s.department] = { realm_id: s.realm_id, company_name: s.company_name, is_active: s.is_active };
+      }
+      setQbStatus(map);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleConnectQuickBooks = async (dept: string) => {
+    try {
+      const { auth_url } = await api.connectDepartmentQuickBooks(dept);
+      window.location.href = auth_url;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to connect QuickBooks");
+    }
+  };
+
+  const handleDisconnectQuickBooks = async (dept: string) => {
+    if (!confirm(`Disconnect QuickBooks for ${DEPARTMENT_CONFIG[dept]?.label || dept}? The AI agent will lose QuickBooks access.`)) return;
+    try {
+      await api.disconnectDepartmentQuickBooks(dept);
+      setQbStatus((prev) => {
+        const next = { ...prev };
+        delete next[dept];
+        return next;
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect QuickBooks");
     }
   };
 
@@ -489,6 +532,48 @@ function AdminPageContent() {
                           className="w-full text-xs py-1.5 rounded-lg border border-[#4A154B] text-[#4A154B] hover:bg-[#4A154B] hover:text-white transition"
                         >
                           Connect Slack
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* QuickBooks Integration */}
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">QuickBooks Integration</h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
+              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                const cfg = DEPARTMENT_CONFIG[dept];
+                const qb = qbStatus[dept];
+                return (
+                  <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl">{cfg?.icon}</span>
+                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                    </div>
+                    {qb ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <span className="text-xs font-medium text-green-700">Connected</span>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate mb-3" title={qb.company_name || qb.realm_id}>{qb.company_name || `Realm: ${qb.realm_id}`}</p>
+                        <button
+                          onClick={() => handleDisconnectQuickBooks(dept)}
+                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                        <button
+                          onClick={() => handleConnectQuickBooks(dept)}
+                          className="w-full text-xs py-1.5 rounded-lg border border-[#2CA01C] text-[#2CA01C] hover:bg-[#2CA01C] hover:text-white transition"
+                        >
+                          Connect QuickBooks
                         </button>
                       </div>
                     )}

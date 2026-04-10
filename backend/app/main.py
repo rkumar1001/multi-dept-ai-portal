@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, chat, conversations, admin, email, slack
+from app.api import auth, chat, conversations, admin, email, slack, quickbooks
 from app.config import get_settings
 from app.db.database import init_db
 
@@ -41,6 +41,7 @@ app.include_router(conversations.router)
 app.include_router(admin.router)
 app.include_router(email.router)
 app.include_router(slack.router)
+app.include_router(quickbooks.router)
 
 
 @app.get("/health")

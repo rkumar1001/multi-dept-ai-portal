@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     slack_client_secret: str = ""
     slack_redirect_uri: str = "http://localhost:8000/api/v1/slack/callback"
 
+    # QuickBooks OAuth
+    quickbooks_client_id: str = ""
+    quickbooks_client_secret: str = ""
+    quickbooks_redirect_uri: str = "http://localhost:8000/api/v1/quickbooks/callback"
+    quickbooks_environment: str = "sandbox"
+
     model_config = {"env_file": str(_ENV_FILE), "extra": "ignore"}
 
 

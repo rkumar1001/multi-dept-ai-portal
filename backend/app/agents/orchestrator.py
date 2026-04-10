@@ -7,9 +7,11 @@ from typing import AsyncIterator
 
 import anthropic
 
-from app.agents.registry import execute_tool, get_prompt, get_tools, is_email_tool
+from app.agents.registry import execute_tool, get_prompt, get_tools, get_tools_with_slack, is_email_tool, is_slack_tool, is_quickbooks_tool
 from app.config import get_settings
 from app.departments.common.email_tools import execute_email_tool
+from app.departments.common.slack_tools import execute_slack_tool
+from app.departments.common.quickbooks_tools import execute_quickbooks_tool
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -21,7 +23,7 @@ class AgentResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     tool_calls: list[dict] = field(default_factory=list)
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-sonnet-4-5-20250929"
 
 
 class AgentOrchestrator:
@@ -29,7 +31,7 @@ class AgentOrchestrator:
 
     def __init__(self):
         self.client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        self.model = "claude-sonnet-4-20250514"
+        self.model = "claude-sonnet-4-5-20250929"
 
     async def process_query(
         self,
@@ -41,7 +43,7 @@ class AgentOrchestrator:
         """Process a user query through the appropriate department agent."""
         try:
             system_prompt = get_prompt(department)
-            tools = get_tools(department)
+            tools = await get_tools_with_slack(department, db)
         except KeyError:
             return AgentResponse(content=f"Error: Unknown department '{department}'.")
 
@@ -83,6 +85,12 @@ class AgentOrchestrator:
                         # Email tools
                         if is_email_tool(block.name) and db is not None:
                             tool_result = await execute_email_tool(block.name, block.input, department, db)
+                        # Slack tools
+                        elif is_slack_tool(block.name) and db is not None:
+                            tool_result = await execute_slack_tool(block.name, block.input, department, db)
+                        # QuickBooks tools
+                        elif is_quickbooks_tool(block.name) and db is not None:
+                            tool_result = await execute_quickbooks_tool(block.name, block.input, department, db)
                         else:
                             tool_result = await execute_tool(department, block.name, block.input)
 
@@ -124,7 +132,7 @@ class AgentOrchestrator:
         """Stream a response from the department agent via SSE-compatible chunks."""
         try:
             system_prompt = get_prompt(department)
-            tools = get_tools(department)
+            tools = await get_tools_with_slack(department, db)
         except KeyError:
             yield f"Error: Unknown department '{department}'."
             return

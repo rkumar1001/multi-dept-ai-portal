@@ -15,8 +15,6 @@ interface ServiceData {
   bgColor: string;
   features: string[];
   integrations: { name: string; logo: string; desc: string }[];
-  price: string;
-  period: string;
   credentials: { email: string; password: string };
 }
 
@@ -43,11 +41,9 @@ const SERVICE_DATA: Record<string, ServiceData> = {
     integrations: [
       { name: "FleetHunt", logo: "🗺️", desc: "GPS fleet tracking" },
       { name: "Samsara", logo: "📡", desc: "ELD & telematics" },
+      { name: "Slack", logo: "💬", desc: "Team messaging" },
       { name: "Highway", logo: "🛣️", desc: "Carrier compliance" },
-      { name: "Triumph", logo: "💳", desc: "Factoring & payments" },
     ],
-    price: "$299",
-    period: "/month",
     credentials: { email: "admin1@gmail.com", password: "admin" },
   },
   "restaurant-ai": {
@@ -72,11 +68,9 @@ const SERVICE_DATA: Record<string, ServiceData> = {
     integrations: [
       { name: "POS System", logo: "🖥️", desc: "Point of sale" },
       { name: "DoorDash", logo: "🚗", desc: "Delivery platform" },
-      { name: "OpenTable", logo: "📅", desc: "Reservations" },
+      { name: "Slack", logo: "💬", desc: "Team messaging" },
       { name: "QuickBooks", logo: "📊", desc: "Accounting" },
     ],
-    price: "$199",
-    period: "/month",
     credentials: { email: "admin@gmail.com", password: "admin" },
   },
   "finance-ai": {
@@ -101,11 +95,9 @@ const SERVICE_DATA: Record<string, ServiceData> = {
     integrations: [
       { name: "QuickBooks", logo: "📊", desc: "Accounting" },
       { name: "Stripe", logo: "💳", desc: "Payments" },
-      { name: "Plaid", logo: "🏦", desc: "Banking" },
+      { name: "Slack", logo: "💬", desc: "Team messaging" },
       { name: "Xero", logo: "📒", desc: "Bookkeeping" },
     ],
-    price: "$249",
-    period: "/month",
     credentials: { email: "finance@demo.com", password: "admin" },
   },
   "accounting-ai": {
@@ -130,11 +122,9 @@ const SERVICE_DATA: Record<string, ServiceData> = {
     integrations: [
       { name: "QuickBooks", logo: "📊", desc: "Accounting" },
       { name: "Bill.com", logo: "📄", desc: "AP automation" },
-      { name: "Expensify", logo: "🧾", desc: "Expense mgmt" },
+      { name: "Slack", logo: "💬", desc: "Team messaging" },
       { name: "Gusto", logo: "👥", desc: "Payroll" },
     ],
-    price: "$199",
-    period: "/month",
     credentials: { email: "accounting@demo.com", password: "admin" },
   },
   "sales-ai": {
@@ -159,11 +149,9 @@ const SERVICE_DATA: Record<string, ServiceData> = {
     integrations: [
       { name: "Salesforce", logo: "☁️", desc: "CRM" },
       { name: "HubSpot", logo: "🔶", desc: "Marketing" },
-      { name: "Gmail", logo: "📧", desc: "Email" },
+      { name: "Slack", logo: "💬", desc: "Team messaging" },
       { name: "LinkedIn", logo: "💼", desc: "Social selling" },
     ],
-    price: "$249",
-    period: "/month",
     credentials: { email: "sales@demo.com", password: "admin" },
   },
 };
@@ -306,13 +294,10 @@ export default function ServiceDetailPage() {
             {/* Right — Pricing Card */}
             <div className="lg:col-span-1">
               <div className="sticky top-28 rounded-2xl bg-white border border-gray-200/60 shadow-xl shadow-gray-200/40 overflow-hidden animate-slide-up">
-                {/* Price Header */}
+                {/* Header */}
                 <div className="bg-brand-gradient p-6 text-center">
-                  <p className="text-white/60 text-sm mb-1">Starting at</p>
-                  <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-4xl font-extrabold text-white">{service.price}</span>
-                    <span className="text-white/60">{service.period}</span>
-                  </div>
+                  <p className="text-2xl font-bold text-white">Get Started</p>
+                  <p className="text-white/60 text-sm mt-1">Select your integrations below</p>
                 </div>
 
                 <div className="p-6 space-y-5">
@@ -368,9 +353,7 @@ export default function ServiceDetailPage() {
                           : "Buy Plan with All Integrations"}
                       </button>
 
-                      <p className="text-xs text-gray-400 text-center">
-                        30-day money-back guarantee
-                      </p>
+
                     </>
                   )}
 
