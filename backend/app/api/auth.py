@@ -1,10 +1,12 @@
 """Authentication API routes — /api/v1/auth/*"""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.middleware.auth_middleware import CurrentUser, get_current_user
 from app.models.user import Department, Role
 from app.services.auth_service import authenticate_user, create_access_token, create_user
 
@@ -60,3 +62,12 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
         role=user.role.value,
         full_name=user.full_name,
     )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    current_user: CurrentUser = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+):
+    """Revoke the current access token."""
+    pass

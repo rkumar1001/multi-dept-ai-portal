@@ -1,3 +1,5 @@
+import type React from "react";
+
 export interface DashboardKPI {
   label: string;
   value: string | number;
@@ -35,4 +37,6 @@ export interface Integration {
   department: string;
   connected: boolean;
   color: string;
+  oauthRequired?: boolean;  // true = needs admin OAuth (Slack, Email, QuickBooks)
+  connectType?: "slack" | "gmail" | "outlook" | "quickbooks";
 }

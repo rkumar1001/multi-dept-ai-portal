@@ -74,14 +74,14 @@ docker compose up --build
 
 The backend auto-seeds these users on first startup:
 
-| Email                       | Password     | Department  | Role  |
-|-----------------------------|-------------|-------------|-------|
-| admin@gmail.com             | admin123    | logistics   | admin |
-| admin1@gmail.com            | admin123    | logistics   | admin |
-| themasalatwist@gmail.com    | masala123   | restaurant  | admin |
-| finance@demo.com            | finance123  | finance     | admin |
-| accounting@demo.com         | accounting123| accounting | admin |
-| sales@demo.com              | sales123    | sales       | admin |
+| Email                       | Password | Department  | Role  |
+|-----------------------------|----------|-------------|-------|
+| admin@gmail.com             | admin    | restaurant  | admin |
+| admin1@gmail.com            | admin    | logistics   | admin |
+| themasalatwist@gmail.com    | oxnard   | restaurant  | user  |
+| finance@demo.com            | admin    | finance     | admin |
+| accounting@demo.com         | admin    | accounting  | admin |
+| sales@demo.com              | admin    | sales       | admin |
 
 ## Department Agents
 
@@ -101,16 +101,18 @@ Each department gets a specialized AI agent with:
 
 ## API Endpoints
 
-| Endpoint                       | Method | Purpose                    |
-|-------------------------------|--------|----------------------------|
-| `/api/v1/auth/login`          | POST   | Authenticate user          |
-| `/api/v1/auth/register`       | POST   | Register new user          |
-| `/api/v1/chat`                | POST   | Send message to dept agent |
-| `/api/v1/conversations`       | GET    | List conversation history  |
-| `/api/v1/conversations/{id}`  | GET    | Get conversation detail    |
-| `/api/v1/admin/usage`         | GET    | Department usage metrics   |
-| `/api/v1/admin/config/{dept}` | GET/PUT| Department budget config   |
-| `/health`                     | GET    | Health check               |
+| Endpoint                       | Method  | Auth | Purpose                           |
+|-------------------------------|---------|------|-----------------------------------|
+| `/api/v1/auth/login`          | POST    | No   | Authenticate user, returns JWT    |
+| `/api/v1/auth/register`       | POST    | No   | Register new user, returns JWT    |
+| `/api/v1/chat`                | POST    | Yes  | Send message to dept AI agent     |
+| `/api/v1/chat/stream`         | GET     | Yes  | Stream AI response via SSE        |
+| `/api/v1/conversations`       | GET     | Yes  | List user's conversations (max 50)|
+| `/api/v1/conversations/{id}`  | GET     | Yes  | Get conversation with messages    |
+| `/api/v1/admin/usage`         | GET     | Admin| Aggregated usage metrics          |
+| `/api/v1/admin/config/{dept}` | GET/PUT | Admin| Department budget configuration   |
+| `/api/v1/admin/insights`      | GET     | Admin| Department KPI insights           |
+| `/health`                     | GET     | No   | Health check                      |
 
 ## Project Structure
 
@@ -118,28 +120,36 @@ Each department gets a specialized AI agent with:
 backend/
   app/
     main.py              # FastAPI app, CORS, lifespan
-    config.py            # Settings from .env
+    config.py            # Settings from .env (Pydantic Settings)
     agents/
-      orchestrator.py    # Claude tool-use loop
-      prompts.py         # Department system prompts
-      tools.py           # Tool definitions & handlers
+      orchestrator.py    # Claude tool-use loop (agentic pattern)
+      registry.py        # Department registry — maps dept → tools/prompts/executors
+    departments/         # Per-department modules (isolated tools + prompts)
+      __init__.py        # Protocol interface for department modules
+      sales/             # prompts.py + tools.py (mock CRM, email, market)
+      finance/           # prompts.py + tools.py (mock ERP, cash flow, compliance)
+      accounting/        # prompts.py + tools.py (mock invoices, reconciliation, tax)
+      restaurant/        # prompts.py + tools.py + data.py (real menu + FCM orders)
+      logistics/         # prompts.py + tools.py (real FleetHunt GPS API)
     api/                 # Route handlers (auth, chat, conversations, admin)
-    db/database.py       # SQLAlchemy async engine + session
-    middleware/           # Rate limiter, auth middleware
-    models/              # SQLAlchemy ORM models (User, Conversation, Usage)
+    db/database.py       # SQLAlchemy async engine + session + seed users
+    middleware/           # Rate limiter, auth middleware (JWT)
+    models/              # SQLAlchemy ORM models (User, Conversation, Message, Usage)
     services/            # Auth & usage business logic
 
 frontend/
   src/
     app/
-      page.tsx           # Landing page
-      login/page.tsx     # Login page
-      chat/page.tsx      # Chat dashboard with AI agents
-      services/page.tsx  # Service catalog
-      services/[id]/page.tsx  # Service detail + buy flow
-      admin/page.tsx     # Admin dashboard
-    lib/api.ts           # API client (fetch wrapper)
-    types/index.ts       # TypeScript types, department config, quick prompts
+      page.tsx           # Landing page (VRTek hero, features)
+      login/page.tsx     # Login/register form with department selection
+      chat/page.tsx      # Chat interface with sidebar, messages, voice input
+      services/page.tsx  # Service catalog (5 department cards)
+      services/[id]/page.tsx  # Service detail + purchase flow
+      admin/page.tsx     # Admin dashboard (charts, KPIs, budget config)
+    components/chat/     # DashboardMessage, DashboardTable, DonutChart, MessageActions
+    departments/         # Config, dashboard transforms, integrations, types
+    lib/api.ts           # API client (fetch wrapper with Bearer token)
+    types/index.ts       # Core TypeScript interfaces
 ```
 
 ## Environment Variables
@@ -155,11 +165,17 @@ See [`backend/.env.example`](backend/.env.example) for all available settings. K
 | `FCM_BACKEND_URL`     | No       | FCM backend for restaurant dept     |
 | `FCM_BACKEND_SECRET`  | No       | FCM backend auth secret             |
 
+## Learn More
+
+For a comprehensive deep-dive into every concept, workflow, and code pattern, see [**PROJECT_GUIDE.md**](PROJECT_GUIDE.md). It covers the tool-use loop, department registry pattern, authentication flow, database models, and more.
+
 ## License
 
 MIT
 
-### Logistics Department (FleetHunt MCP)
+---
+
+### Logistics Department (FleetHunt GPS)
 
 The Logistics agent is powered by the **FleetHunt GPS tracking API**, providing real-time fleet management capabilities:
 
@@ -181,39 +197,49 @@ Vehicle status is derived from real-time data:
 | Idle    | `speed == 0` and `ignition on` |
 | Stopped | `speed == 0` and `ignition off`|
 
-## Project Structure
+## Detailed Project Structure
 
 ```
 ├── backend/
 │   ├── app/
-│   │   ├── agents/          # Agent orchestrator, prompts, tools
-│   │   │   ├── orchestrator.py   # Routes queries to department agents
-│   │   │   ├── prompts.py        # System prompts per department
-│   │   │   └── tools.py          # Tool definitions & FleetHunt API integration
-│   │   ├── api/             # FastAPI route handlers
-│   │   │   ├── admin.py          # Admin dashboard & KPIs
-│   │   │   ├── auth.py           # Registration & login
-│   │   │   ├── chat.py           # Chat endpoint (dept-aware)
-│   │   │   └── conversations.py  # Conversation history
-│   │   ├── db/              # Database engine & session
-│   │   ├── middleware/      # Auth, rate limiting
-│   │   ├── models/          # SQLAlchemy models (User, Conversation)
-│   │   ├── services/        # Auth & usage services
-│   │   ├── config.py        # Settings (env-based, incl. FleetHunt config)
-│   │   └── main.py          # App entry point
-│   ├── requirements.txt     # Python dependencies
-│   ├── .env.example         # Environment variable template
+│   │   ├── agents/              # Core AI engine
+│   │   │   ├── orchestrator.py  # Claude tool-use loop (agentic pattern)
+│   │   │   └── registry.py      # Department registry (maps dept → tools/prompts/executors)
+│   │   ├── departments/         # Per-department modules (each has prompts + tools)
+│   │   │   ├── __init__.py      # Protocol class defining the department interface
+│   │   │   ├── sales/           # Mock CRM, email logs, market data
+│   │   │   ├── finance/         # Mock ERP, cash flow, compliance
+│   │   │   ├── accounting/      # Mock invoices, reconciliation, tax
+│   │   │   ├── restaurant/      # Real menu data (100+ items) + FCM order API
+│   │   │   └── logistics/       # Real FleetHunt GPS API (10 tools)
+│   │   ├── api/                 # FastAPI route handlers
+│   │   │   ├── admin.py         # Usage metrics, budget config, KPI insights
+│   │   │   ├── auth.py          # Login & registration
+│   │   │   ├── chat.py          # POST /chat + GET /chat/stream (SSE)
+│   │   │   └── conversations.py # Conversation history
+│   │   ├── db/database.py       # Async SQLAlchemy engine + session + seed users
+│   │   ├── middleware/          # JWT auth, in-memory rate limiter
+│   │   ├── models/              # ORM models (User, Conversation, Message, Usage, Budget)
+│   │   ├── services/            # Auth (bcrypt + JWT) & usage tracking
+│   │   ├── config.py            # Pydantic Settings (.env loader with @lru_cache)
+│   │   └── main.py              # FastAPI app, CORS, lifespan, router registration
+│   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app/             # Next.js pages
-│   │   │   ├── login/       # Department selection & auth
-│   │   │   ├── chat/        # Chat interface per department
-│   │   │   └── admin/       # Usage dashboard & KPIs
-│   │   ├── lib/             # API client (axios)
-│   │   └── types/           # TypeScript types & department config
+│   │   ├── app/                 # Next.js App Router pages
+│   │   │   ├── page.tsx         # Landing page (VRTek branding)
+│   │   │   ├── login/           # Auth form with department selection
+│   │   │   ├── chat/            # Main AI chat interface
+│   │   │   ├── admin/           # Admin dashboard (Recharts)
+│   │   │   └── services/        # Service catalog + detail pages
+│   │   ├── components/chat/     # DashboardMessage, DashboardTable, DonutChart
+│   │   ├── departments/         # Config, dashboard transforms, integrations
+│   │   ├── lib/api.ts           # Fetch wrapper with Bearer token injection
+│   │   └── types/               # TypeScript interfaces + Web Speech API types
 │   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
+│   └── Dockerfile               # Multi-stage build (deps → build → runner)
+├── docker-compose.yml           # 2 services: backend + frontend
+├── PROJECT_GUIDE.md             # Complete technical deep-dive (this project)
 └── README.md
 ```

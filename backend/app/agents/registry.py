@@ -2,6 +2,9 @@
 
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.departments.sales import tools as sales_tools
 from app.departments.sales import prompts as sales_prompts
 from app.departments.finance import tools as finance_tools
@@ -12,6 +15,9 @@ from app.departments.restaurant import tools as restaurant_tools
 from app.departments.restaurant import prompts as restaurant_prompts
 from app.departments.logistics import tools as logistics_tools
 from app.departments.logistics import prompts as logistics_prompts
+from app.departments.common.email_tools import EMAIL_TOOLS, is_email_tool  # noqa: F401 — re-exported
+from app.departments.common.slack_tools import SLACK_TOOLS, is_slack_tool  # noqa: F401 — re-exported
+from app.departments.common.quickbooks_tools import QUICKBOOKS_TOOLS, is_quickbooks_tool  # noqa: F401 — re-exported
 
 _REGISTRY: dict[str, dict] = {
     "sales": {"tools": sales_tools.TOOLS, "prompt": sales_prompts.SYSTEM_PROMPT, "execute": sales_tools.execute_tool},
@@ -28,7 +34,36 @@ def get_tools(department: str) -> list[dict]:
     entry = _REGISTRY.get(department)
     if entry is None:
         raise KeyError(f"Unknown department: {department}")
-    return entry["tools"]
+    return entry["tools"] + EMAIL_TOOLS
+
+
+async def get_tools_with_slack(department: str, db: AsyncSession | None = None) -> list[dict]:
+    """Return department tools + email tools + slack tools + quickbooks tools (only if connected)."""
+    entry = _REGISTRY.get(department)
+    if entry is None:
+        raise KeyError(f"Unknown department: {department}")
+    tools = entry["tools"] + EMAIL_TOOLS
+    if db is not None:
+        from app.models.slack_config import DepartmentSlackConfig
+        result = await db.execute(
+            select(DepartmentSlackConfig).where(
+                DepartmentSlackConfig.department == department,
+                DepartmentSlackConfig.is_active.is_(True),
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            tools = tools + SLACK_TOOLS
+
+        from app.models.quickbooks_config import DepartmentQuickBooksConfig
+        qb_result = await db.execute(
+            select(DepartmentQuickBooksConfig).where(
+                DepartmentQuickBooksConfig.department == department,
+                DepartmentQuickBooksConfig.is_active.is_(True),
+            )
+        )
+        if qb_result.scalar_one_or_none() is not None:
+            tools = tools + QUICKBOOKS_TOOLS
+    return tools
 
 
 def get_prompt(department: str) -> str:
