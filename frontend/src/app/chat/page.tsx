@@ -202,6 +202,28 @@ function extractDashboardData(toolCalls: Record<string, unknown>[], dept: string
         badge = `${out.jurisdiction || "Tax"} calculation`; followUps.push("Pending invoices", "Account reconciliation");
       }
     }
+    // ── WEATHER (shared across all departments) ──
+    if (tn === "get_weather") {
+      const cur = out.current as Record<string, unknown> | undefined;
+      const fc = (out.forecast as Record<string, unknown>[]) || [];
+      if (cur) {
+        title = "Weather Report";
+        badge = String(out.location || "Weather");
+        const temp = Number(cur.temperature_c ?? 0);
+        const feels = Number(cur.feels_like_c ?? 0);
+        const humidity = Number(cur.humidity_pct ?? 0);
+        const wind = Number(cur.wind_speed_kmh ?? 0);
+        const precip = Number(cur.precipitation_mm ?? 0);
+        kpis.push(
+          { label: "TEMPERATURE", value: `${temp}°C`, subtitle: `Feels like ${feels}°C`, color: temp > 30 ? "#ef4444" : temp < 0 ? "#3b82f6" : "#22c55e" },
+          { label: "CONDITION", value: String(cur.condition || "—"), subtitle: precip > 0 ? `${precip}mm rain` : "No precipitation", color: "#557C93" },
+          { label: "HUMIDITY", value: `${humidity}%`, subtitle: humidity > 80 ? "High" : humidity < 30 ? "Low" : "Normal", color: "#08203E" },
+          { label: "WIND", value: `${wind} km/h`, subtitle: wind > 50 ? "⚠️ Strong" : "Calm", color: wind > 50 ? "#d97706" : "#6b7280" },
+        );
+        if (fc.length > 0) tables.push({ rows: fc });
+        followUps.push("Check weather in another city", "Fleet summary", "Show full menu");
+      }
+    }
 
     // ── SALES ──
     if (dept === "sales") {
@@ -785,6 +807,8 @@ function ChatPageContent() {
   const [streamingToolStatus, setStreamingToolStatus] = useState<string | null>(null);
   /** Ref that mirrors streamingContent so the finally-block can read the latest value */
   const streamingContentRef = useRef("");
+  const [attachments, setAttachments] = useState<{ file_id: string; filename: string; size: number }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -910,6 +934,28 @@ function ChatPageContent() {
     recognition.start();
   }, [isListening]);
 
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`File "${file.name}" is too large (max 10 MB)`);
+        continue;
+      }
+      try {
+        const result = await api.uploadFile(file);
+        setAttachments((prev) => [...prev, { file_id: result.file_id, filename: result.filename, size: result.size }]);
+      } catch (err) {
+        alert(`Failed to upload "${file.name}": ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  const removeAttachment = useCallback((file_id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.file_id !== file_id));
+  }, []);
+
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const msg = overrideMessage || input.trim();
     if (!msg || loading) return;
@@ -920,8 +966,12 @@ function ChatPageContent() {
       recognitionRef.current = null;
     }
     if (!overrideMessage) setInput("");
-
-    setMessages((prev) => [...prev, { role: "user", content: msg }]);
+    const currentAttachments = attachments.length > 0 ? [...attachments] : undefined;
+    setAttachments([]);
+    const displayMsg = currentAttachments
+      ? `${msg}\n\n📎 ${currentAttachments.map(a => a.filename).join(", ")}`
+      : msg;
+    setMessages((prev) => [...prev, { role: "user", content: displayMsg }]);
     setLoading(true);
     streamingContentRef.current = "";
     setStreamingContent("");
@@ -1041,7 +1091,7 @@ function ChatPageContent() {
       setLoading(false);
       loadConversations();
     }
-  }, [input, loading, conversationId]);
+  }, [input, loading, conversationId, attachments]);
 
   const handleStop = useCallback(() => {
     if (abortControllerRef.current) {
@@ -1546,11 +1596,49 @@ function ChatPageContent() {
         {/* Input */}
         <div className="border-t border-gray-200/60 bg-white/80 backdrop-blur-sm px-5 py-4">
           <div className="mx-auto max-w-4xl">
+            {/* Attachment preview chips */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2 px-1">
+                {attachments.map((att) => (
+                  <span key={att.file_id} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-teal/10 border border-brand-teal/20 px-3 py-1.5 text-xs text-brand-navy">
+                    <svg className="w-3.5 h-3.5 text-brand-teal" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    {att.filename}
+                    <span className="text-gray-400 text-[10px]">({(att.size / 1024).toFixed(0)}KB)</span>
+                    <button onClick={() => removeAttachment(att.file_id)} className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Hidden file input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              multiple
+              className="hidden"
+              accept=".txt,.csv,.json,.xml,.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.md,.log,.yaml,.yml"
+            />
             <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2 shadow-sm focus-within:border-brand-teal/40 focus-within:shadow-lg focus-within:shadow-brand-navy/5 transition-all">
               {/* Sparkle icon */}
               <svg className="w-5 h-5 text-brand-teal/60 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12" />
               </svg>
+              {/* Attachment button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-lg p-2 text-gray-400 hover:text-brand-teal hover:bg-brand-teal/5 transition-all"
+                title="Attach file"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
               <input
                 type="text"
                 value={input}

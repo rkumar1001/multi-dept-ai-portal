@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import anthropic
 
@@ -24,6 +24,29 @@ _RETRYABLE_ERRORS = (
     anthropic.APITimeoutError,
     anthropic.InternalServerError,
 )
+
+# Limits
+_MAX_HISTORY_MESSAGES = 20  # Keep last N messages to cap input tokens
+_MAX_TOOL_RESULT_CHARS = 8000  # Truncate large tool results
+_MAX_TOOL_LOOPS = 5  # Prevent infinite tool loops
+_RATE_LIMIT_RETRIES = 2  # Retries on 429
+_RATE_LIMIT_BASE_DELAY = 5  # Seconds before first retry
+
+
+def _truncate_tool_result(result: Any, max_chars: int = _MAX_TOOL_RESULT_CHARS) -> str:
+    """Serialize and truncate a tool result to stay within token budget."""
+    text = json.dumps(result)
+    if len(text) <= max_chars:
+        return text
+    # Truncate and add indicator
+    return text[:max_chars] + '... [truncated]"}'
+
+
+def _trim_history(messages: list[dict], max_messages: int = _MAX_HISTORY_MESSAGES) -> list[dict]:
+    """Keep only the last N messages to bound input tokens."""
+    if len(messages) <= max_messages:
+        return messages
+    return messages[-max_messages:]
 
 
 @dataclass
@@ -79,19 +102,32 @@ class AgentOrchestrator:
         except KeyError:
             return AgentResponse(content=f"Error: Unknown department '{department}'.")
 
-        # Build message history
+        # Build message history (trimmed to cap tokens)
         messages = []
         if conversation_history:
-            for msg in conversation_history:
+            trimmed = _trim_history(conversation_history)
+            for msg in trimmed:
                 messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_message})
 
         total_input_tokens = 0
         total_output_tokens = 0
         all_tool_calls = []
+        loop_count = 0
 
         # Agent loop: keeps running until the model produces a final text response
         while True:
+            if loop_count >= _MAX_TOOL_LOOPS:
+                logger.warning("Tool loop limit (%d) reached for %s, forcing text response", _MAX_TOOL_LOOPS, department)
+                return AgentResponse(
+                    content="I gathered the data but hit the processing limit. Here's what I found so far — please ask a more specific follow-up question.",
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    tool_calls=all_tool_calls,
+                    model=self.model,
+                )
+            loop_count += 1
+
             kwargs = {
                 "model": self.model,
                 "max_tokens": 4096,
@@ -109,12 +145,20 @@ class AgentOrchestrator:
                     content=(
                         "I'm having trouble connecting to the AI service right now. "
                         f"Please try again in a moment. ({type(exc).__name__})"
-                    )
+                    ),
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    tool_calls=all_tool_calls,
+                    model=self.model,
                 )
             except Exception as exc:
                 logger.error("Unexpected Claude API error: %s", exc)
                 return AgentResponse(
-                    content="An unexpected error occurred. Please try again."
+                    content="An unexpected error occurred. Please try again.",
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    tool_calls=all_tool_calls,
+                    model=self.model,
                 )
 
             total_input_tokens += response.usage.input_tokens
@@ -148,7 +192,7 @@ class AgentOrchestrator:
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": json.dumps(tool_result),
+                            "content": _truncate_tool_result(tool_result),
                         })
 
                 messages.append({"role": "user", "content": tool_results})
