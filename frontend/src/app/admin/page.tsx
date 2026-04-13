@@ -60,6 +60,8 @@ function AdminPageContent() {
   const [emailStatus, setEmailStatus] = useState<Record<string, { provider: string; email_address: string; is_active: boolean }>>({});
   const [slackStatus, setSlackStatus] = useState<Record<string, { team_name: string; team_id: string; is_active: boolean }>>({});
   const [qbStatus, setQbStatus] = useState<Record<string, { realm_id: string; company_name: string | null; is_active: boolean }>>({});
+  const [qbConnecting, setQbConnecting] = useState<string | null>(null);
+  const [slackConnecting, setSlackConnecting] = useState<string | null>(null);
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -71,10 +73,14 @@ function AdminPageContent() {
     loadEmailStatus();
     loadSlackStatus();
     loadQbStatus();
-    // Handle OAuth callback redirect
+
+    // Handle OAuth callback redirect (popup sends postMessage, but also handle direct redirect)
     const emailConnected = searchParams.get("email_connected");
     const slackConnected = searchParams.get("slack_connected");
     const qbConnected = searchParams.get("quickbooks_connected");
+    const qbError = searchParams.get("quickbooks_error");
+    const slackError = searchParams.get("slack_error");
+
     if (emailConnected) {
       loadEmailStatus();
       window.history.replaceState({}, "", "/admin");
@@ -82,10 +88,32 @@ function AdminPageContent() {
     if (slackConnected) {
       loadSlackStatus();
       window.history.replaceState({}, "", "/admin");
+      // If we're the popup, notify opener and close
+      if (window.opener) {
+        window.opener.postMessage({ type: "slack_connected", dept: slackConnected }, window.location.origin);
+        window.close();
+        return;
+      }
+    }
+    if (slackError) {
+      setError(`Slack connection failed: ${decodeURIComponent(slackError)}`);
+      window.history.replaceState({}, "", "/admin");
+      if (window.opener) { window.opener.postMessage({ type: "slack_error", error: slackError }, window.location.origin); window.close(); return; }
     }
     if (qbConnected) {
       loadQbStatus();
       window.history.replaceState({}, "", "/admin");
+      // If we're the popup, notify opener and close
+      if (window.opener) {
+        window.opener.postMessage({ type: "quickbooks_connected", dept: qbConnected }, window.location.origin);
+        window.close();
+        return;
+      }
+    }
+    if (qbError) {
+      setError(`QuickBooks connection failed: ${decodeURIComponent(qbError)}`);
+      window.history.replaceState({}, "", "/admin");
+      if (window.opener) { window.opener.postMessage({ type: "quickbooks_error", error: qbError }, window.location.origin); window.close(); return; }
     }
   }, [router, searchParams]);
 
@@ -127,8 +155,37 @@ function AdminPageContent() {
   const handleConnectSlack = async (dept: string) => {
     try {
       const { auth_url } = await api.connectDepartmentSlack(dept);
-      window.location.href = auth_url;
+      setSlackConnecting(dept);
+      const popup = window.open(auth_url, "slack_oauth", "width=700,height=800,scrollbars=yes,resizable=yes");
+      if (!popup) {
+        // Popup blocked — fall back to redirect
+        window.location.href = auth_url;
+        return;
+      }
+      // Listen for postMessage from popup
+      const handleMsg = (e: MessageEvent) => {
+        if (e.data?.type === "slack_connected") {
+          window.removeEventListener("message", handleMsg);
+          setSlackConnecting(null);
+          loadSlackStatus();
+        } else if (e.data?.type === "slack_error") {
+          window.removeEventListener("message", handleMsg);
+          setSlackConnecting(null);
+          setError(`Slack connection failed: ${e.data.error}`);
+        }
+      };
+      window.addEventListener("message", handleMsg);
+      // Also poll popup closed as fallback
+      const poll = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(poll);
+          window.removeEventListener("message", handleMsg);
+          setSlackConnecting(null);
+          loadSlackStatus();
+        }
+      }, 800);
     } catch (err: unknown) {
+      setSlackConnecting(null);
       setError(err instanceof Error ? err.message : "Failed to connect Slack");
     }
   };
@@ -177,8 +234,37 @@ function AdminPageContent() {
   const handleConnectQuickBooks = async (dept: string) => {
     try {
       const { auth_url } = await api.connectDepartmentQuickBooks(dept);
-      window.location.href = auth_url;
+      setQbConnecting(dept);
+      const popup = window.open(auth_url, "qb_oauth", "width=700,height=800,scrollbars=yes,resizable=yes");
+      if (!popup) {
+        // Popup blocked — fall back to redirect
+        window.location.href = auth_url;
+        return;
+      }
+      // Listen for postMessage from popup
+      const handleMsg = (e: MessageEvent) => {
+        if (e.data?.type === "quickbooks_connected") {
+          window.removeEventListener("message", handleMsg);
+          setQbConnecting(null);
+          loadQbStatus();
+        } else if (e.data?.type === "quickbooks_error") {
+          window.removeEventListener("message", handleMsg);
+          setQbConnecting(null);
+          setError(`QuickBooks connection failed: ${e.data.error}`);
+        }
+      };
+      window.addEventListener("message", handleMsg);
+      // Also poll popup closed as fallback
+      const poll = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(poll);
+          window.removeEventListener("message", handleMsg);
+          setQbConnecting(null);
+          loadQbStatus();
+        }
+      }, 800);
     } catch (err: unknown) {
+      setQbConnecting(null);
       setError(err instanceof Error ? err.message : "Failed to connect QuickBooks");
     }
   };
@@ -500,12 +586,16 @@ function AdminPageContent() {
 
             {/* Slack Integration */}
             <h2 className="mb-4 text-lg font-semibold text-gray-900">Slack Integration</h2>
+            <p className="text-xs text-gray-400 mb-4 -mt-2">
+              A Slack authorization window will open. Complete sign-in there — you will stay logged in here.
+            </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
               {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
                 const cfg = DEPARTMENT_CONFIG[dept];
                 const slack = slackStatus[dept];
+                const connecting = slackConnecting === dept;
                 return (
-                  <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
+                  <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-purple-300 bg-purple-50/30" : "border-gray-200"}`}>
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-xl">{cfg?.icon}</span>
                       <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
@@ -523,6 +613,14 @@ function AdminPageContent() {
                         >
                           Disconnect
                         </button>
+                      </div>
+                    ) : connecting ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                          <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
+                        </div>
+                        <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
                       </div>
                     ) : (
                       <div>
@@ -542,12 +640,16 @@ function AdminPageContent() {
 
             {/* QuickBooks Integration */}
             <h2 className="mb-4 text-lg font-semibold text-gray-900">QuickBooks Integration</h2>
+            <p className="text-xs text-gray-400 mb-4 -mt-2">
+              A QuickBooks authorization window will open. Complete sign-in there — you will stay logged in here.
+            </p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
               {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
                 const cfg = DEPARTMENT_CONFIG[dept];
                 const qb = qbStatus[dept];
+                const connecting = qbConnecting === dept;
                 return (
-                  <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
+                  <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-green-300 bg-green-50/30" : "border-gray-200"}`}>
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-xl">{cfg?.icon}</span>
                       <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
@@ -565,6 +667,14 @@ function AdminPageContent() {
                         >
                           Disconnect
                         </button>
+                      </div>
+                    ) : connecting ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                          <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
+                        </div>
+                        <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
                       </div>
                     ) : (
                       <div>

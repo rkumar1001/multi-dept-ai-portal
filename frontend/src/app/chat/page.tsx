@@ -7,8 +7,13 @@ import remarkGfm from "remark-gfm";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { ChatMessage, Conversation } from "@/types";
-import { DEPARTMENT_CONFIG, DEPARTMENT_PROMPTS, getIntegrations } from "@/departments";
-import type { Integration } from "@/departments";
+import { DEPARTMENT_CONFIG, DEPARTMENT_PROMPTS, LOGISTICS_SECTIONS, getIntegrations } from "@/departments";
+import type { Integration, PromptSection } from "@/departments";
+import {
+  BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+  LineChart, Line, CartesianGrid, Area, AreaChart,
+} from "recharts";
 
 /* ── Dashboard Helpers ─────────────────────────────────────────────────── */
 
@@ -227,6 +232,191 @@ function extractDashboardData(toolCalls: Record<string, unknown>[], dept: string
 
 /* ── Donut Chart ──────────────────────────────────────────────────────── */
 
+
+/* -- Logistics Welcome Dashboard -- */
+function LogisticsWelcome({ onSend }: { onSend: (msg: string) => void }) {
+  return (
+    <div className="w-full max-w-5xl mx-auto space-y-5 pb-4">
+      {LOGISTICS_SECTIONS.map((section: PromptSection) => (
+        <div key={section.id} className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100"
+            style={{ background: `linear-gradient(135deg, ${section.accentColor}0a 0%, white 60%)` }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xl shadow-sm"
+              style={{ background: `${section.accentColor}18`, border: `1.5px solid ${section.accentColor}30` }}>
+              {section.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold text-gray-900">{section.label}</h3>
+              <p className="text-[11px] text-gray-400">{section.description}</p>
+            </div>
+            <span className={`text-[11px] font-semibold px-3 py-1 rounded-full ${section.badgeBg} ${section.badgeText}`}
+              style={{ border: `1px solid ${section.accentColor}25` }}>
+              Active
+            </span>
+          </div>
+          <div className="grid grid-cols-3">
+            {section.prompts.slice(0, 9).map((qp, idx) => (
+              <button key={idx} onClick={() => onSend(qp.prompt)}
+                className="flex items-start gap-2.5 p-3.5 text-left transition-colors group hover:bg-gray-50"
+                style={{ borderRight: (idx % 3 !== 2) ? "1px solid #f3f4f6" : undefined, borderBottom: (idx < 6) ? "1px solid #f3f4f6" : undefined }}>
+                <span className="text-base flex-shrink-0 mt-0.5">{qp.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800 group-hover:text-gray-900 leading-tight">{qp.label}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 leading-snug line-clamp-1">{qp.description}</p>
+                </div>
+                <svg className="w-3 h-3 text-gray-300 group-hover:text-gray-400 flex-shrink-0 mt-0.5 ml-auto" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* -- Recharts Analytics Panel -- */
+interface AnalyticsData {
+  barData?: { name: string; value: number; color?: string }[];
+  lineData?: { name: string; value: number; value2?: number }[];
+  pieData?: { name: string; value: number; color: string }[];
+  barLabel?: string; lineLabel?: string; line2Label?: string;
+}
+function AnalyticsPanel({ analytics }: { analytics: AnalyticsData }) {
+  const hasBar = (analytics.barData?.length ?? 0) > 0;
+  const hasLine = (analytics.lineData?.length ?? 0) > 0;
+  const hasPie = (analytics.pieData?.length ?? 0) > 0;
+  if (!hasBar && !hasLine && !hasPie) return null;
+  const RADIAN = Math.PI / 180;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+    if (percent < 0.06) return null;
+    const r = innerRadius + (outerRadius - innerRadius) * 0.55;
+    const x = cx + r * Math.cos(-midAngle * RADIAN);
+    const y = cy + r * Math.sin(-midAngle * RADIAN);
+    return <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>{`${(percent * 100).toFixed(0)}%`}</text>;
+  };
+  const cols = [hasBar, hasLine, hasPie].filter(Boolean).length;
+  return (
+    <div className={`grid gap-3 mt-3 ${cols >= 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+      {hasBar && (
+        <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-3.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">{analytics.barLabel || "Distribution"}</p>
+          <ResponsiveContainer width="100%" height={160}>
+            <ReBarChart data={analytics.barData} margin={{ top: 0, right: 0, left: -22, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid #e5e7eb", boxShadow: "0 2px 8px rgba(0,0,0,.08)" }} cursor={{ fill: "rgba(0,0,0,.03)" }} />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {analytics.barData!.map((entry, i) => <Cell key={i} fill={entry.color || "#557C93"} />)}
+              </Bar>
+            </ReBarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {hasLine && (
+        <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-3.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">{analytics.lineLabel || "Trend"}</p>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={analytics.lineData} margin={{ top: 0, right: 0, left: -22, bottom: 0 }}>
+              <defs>
+                <linearGradient id="areaG1" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#557C93" stopOpacity={0.25} /><stop offset="95%" stopColor="#557C93" stopOpacity={0} /></linearGradient>
+                <linearGradient id="areaG2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25} /><stop offset="95%" stopColor="#14b8a6" stopOpacity={0} /></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid #e5e7eb" }} />
+              <Area type="monotone" dataKey="value" stroke="#557C93" strokeWidth={2.5} fill="url(#areaG1)" name={analytics.lineLabel || "Value"} dot={false} activeDot={{ r: 4, fill: "#557C93" }} />
+              {analytics.lineData!.some(d => d.value2 !== undefined) && (
+                <Area type="monotone" dataKey="value2" stroke="#14b8a6" strokeWidth={2.5} fill="url(#areaG2)" name={analytics.line2Label || "Value 2"} dot={false} activeDot={{ r: 4, fill: "#14b8a6" }} />
+              )}
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {hasPie && !hasBar && (
+        <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-3.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Composition</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={analytics.pieData} cx="50%" cy="50%" outerRadius={72} innerRadius={36} dataKey="value" labelLine={false} label={renderLabel} paddingAngle={2}>
+                {analytics.pieData!.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+              </Pie>
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid #e5e7eb" }} formatter={(v) => [Number(v ?? 0).toLocaleString(), ""]} />
+              <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -- Build analytics from tool calls -- */
+function buildAnalytics(toolCalls: Record<string, unknown>[], dept: string): AnalyticsData {
+  const analytics: AnalyticsData = {};
+  for (const tc of toolCalls) {
+    const tn = (tc.tool as string) || "";
+    const out = tc.output as Record<string, unknown> | undefined;
+    if (!out) continue;
+    const res = (out.results as Record<string, unknown>[]) || [];
+    const sum = out.summary as Record<string, unknown> | undefined;
+    if (dept === "logistics") {
+      if (tn === "get_fleet_summary" || tn === "get_fleet_location") {
+        let mov = 0, idl = 0, stp = 0;
+        if (sum) { mov = Number(sum.moving || 0); idl = Number(sum.idle || 0); stp = Number(sum.stopped || 0); }
+        else { mov = res.filter(r => r.status === "moving").length; idl = res.filter(r => r.status === "idle").length; stp = res.filter(r => r.status === "stopped").length; }
+        if (mov + idl + stp > 0) {
+          analytics.barData = [{ name: "Moving", value: mov, color: "#557C93" }, { name: "Idle", value: idl, color: "#d97706" }, { name: "Stopped", value: stp, color: "#9ca3af" }];
+          analytics.barLabel = "Fleet Status Distribution";
+          analytics.pieData = [{ name: "Moving", value: mov, color: "#557C93" }, { name: "Idle", value: idl, color: "#d97706" }, { name: "Stopped", value: stp, color: "#9ca3af" }];
+        }
+      } else if (tn === "get_moving_vehicles" && res.length > 0) {
+        const sorted = [...res].sort((a, b) => Number(a.speed || 0) - Number(b.speed || 0));
+        analytics.lineData = sorted.slice(0, 15).map((v, i) => ({ name: String(v.name || "V" + (i + 1)).slice(0, 8), value: Number(v.speed || 0) }));
+        analytics.lineLabel = "Vehicle Speed (km/h)";
+        const buckets: Record<string, number> = { "0-40": 0, "41-70": 0, "71-100": 0, "100+": 0 };
+        res.forEach(v => { const s = Number(v.speed || 0); if (s <= 40) buckets["0-40"]++; else if (s <= 70) buckets["41-70"]++; else if (s <= 100) buckets["71-100"]++; else buckets["100+"]++; });
+        analytics.barData = Object.entries(buckets).map(([k, v]) => ({ name: k, value: v, color: k === "100+" ? "#ef4444" : "#557C93" }));
+        analytics.barLabel = "Speed Buckets (km/h)";
+      }
+    }
+    if (["finance", "accounting", "logistics"].includes(dept)) {
+      if ((tn === "qb_profit_and_loss" || tn === "qb_balance_sheet" || tn === "qb_cash_flow") && res.length > 0) {
+        analytics.barData = res.slice(0, 8).map((r, i) => ({ name: String(r.name || r.type || "Item " + (i + 1)).slice(0, 12), value: Math.abs(Number(r.amount || r.value || 0)), color: "#2CA01C" }));
+        analytics.barLabel = tn === "qb_profit_and_loss" ? "P&L Breakdown" : tn === "qb_cash_flow" ? "Cash Flow" : "Balance Sheet";
+      } else if (tn === "qb_list_invoices" && res.length > 0) {
+        const sm: Record<string, number> = {};
+        res.forEach(r => { const s = Number(r.Balance || 0) > 0 ? "Open" : "Paid"; sm[s] = (sm[s] || 0) + 1; });
+        analytics.pieData = Object.entries(sm).map(([k, v], i) => ({ name: k, value: v, color: i === 0 ? "#2CA01C" : "#d97706" }));
+      } else if (tn === "query_invoices" && res.length > 0) {
+        const sm: Record<string, number> = {};
+        res.forEach(r => { const s = String(r.status || "unknown"); sm[s] = (sm[s] || 0) + 1; });
+        const cols: Record<string, string> = { pending: "#d97706", paid: "#22c55e", overdue: "#ef4444", disputed: "#8b5cf6" };
+        analytics.pieData = Object.entries(sm).map(([k, v]) => ({ name: k.charAt(0).toUpperCase() + k.slice(1), value: v, color: cols[k] || "#6b7280" }));
+        analytics.barData = Object.entries(sm).map(([k, v]) => ({ name: k.charAt(0).toUpperCase() + k.slice(1), value: v, color: cols[k] || "#6b7280" }));
+        analytics.barLabel = "Invoice Status";
+      }
+    }
+    if (dept === "restaurant" && tn === "get_orders" && res.length > 0) {
+      analytics.lineData = res.slice(0, 10).map((o, i) => ({ name: "#" + (i + 1), value: Number(o.total || 0) }));
+      analytics.lineLabel = "Order Revenue ($)";
+    }
+    if (dept === "sales" && tn === "query_crm" && res.length > 0) {
+      const sm: Record<string, number> = {};
+      res.forEach(r => { const s = String(r.stage || "Unknown"); sm[s] = (sm[s] || 0) + 1; });
+      const sc = ["#3b82f6", "#22c55e", "#f97316", "#8b5cf6", "#ef4444"];
+      analytics.barData = Object.entries(sm).map(([k, v], i) => ({ name: k, value: v, color: sc[i % sc.length] }));
+      analytics.barLabel = "Deals by Stage";
+      analytics.pieData = Object.entries(sm).map(([k, v], i) => ({ name: k, value: v, color: sc[i % sc.length] }));
+    }
+  }
+  return analytics;
+}
+
 function DonutChart({ segments, centerLabel }: { segments: ChartSegment[]; centerLabel: string }) {
   const total = segments.reduce((s, seg) => s + seg.value, 0);
   if (total === 0) return null;
@@ -256,10 +446,45 @@ function DonutChart({ segments, centerLabel }: { segments: ChartSegment[]; cente
   );
 }
 
+/* ── Horizontal Bar Chart ─────────────────────────────────────────────── */
+
+function BarChart({ segments }: { segments: ChartSegment[] }) {
+  const total = segments.reduce((s, seg) => s + seg.value, 0);
+  if (total === 0 || segments.length === 0) return null;
+  const sorted = [...segments].sort((a, b) => b.value - a.value);
+  return (
+    <div className="w-full space-y-2.5 py-1">
+      {sorted.map((seg) => {
+        const pct = (seg.value / total) * 100;
+        return (
+          <div key={seg.label} className="space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs min-w-0">
+                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: seg.color }} />
+                <span className="text-gray-600 font-medium truncate">{seg.label}</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                <span className="text-xs font-bold text-gray-800">{seg.value.toLocaleString()}</span>
+                <span className="text-[10px] text-gray-400 w-7 text-right">{pct.toFixed(0)}%</span>
+              </div>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="h-1.5 rounded-full transition-all duration-700 ease-out"
+                style={{ width: `${pct}%`, background: seg.color }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ── Dashboard Data Table ─────────────────────────────────────────────── */
 
 function DashboardTable({ rows }: { rows: Record<string, unknown>[] }) {
-  if (rows.length === 0) return null;
+  if (!rows || rows.length === 0) return null;
   const fmtH = (k: string) => k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   const fmtV = (v: unknown): string => {
     if (v === null || v === undefined) return "—";
@@ -268,6 +493,7 @@ function DashboardTable({ rows }: { rows: Record<string, unknown>[] }) {
     return String(v);
   };
   const display = rows.slice(0, 25);
+  if (display.length === 0) return null;
   const keys = Object.keys(display[0]);
   return (
     <div className="overflow-x-auto">
@@ -327,11 +553,14 @@ function DashboardMessage({ content, toolCalls, department, onFollowUp }: {
             </div>
             <div>
               <h3 className="text-sm font-bold text-brand-navy">{data.title}</h3>
-              <p className="text-[10px] text-gray-400">Last updated: {dateStr} &middot; Region: All</p>
+              <p className="text-[10px] text-gray-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+                Live &middot; {dateStr}
+              </p>
             </div>
           </div>
           {data.badge && (
-            <span className="text-[11px] font-medium text-brand-teal bg-brand-teal/10 rounded-full px-3 py-1">{data.badge}</span>
+            <span className="text-[11px] font-medium text-brand-teal bg-brand-teal/10 border border-brand-teal/20 rounded-full px-3 py-1 shadow-sm">{data.badge}</span>
           )}
         </div>
 
@@ -339,10 +568,14 @@ function DashboardMessage({ content, toolCalls, department, onFollowUp }: {
         {data.kpis.length > 0 && (
           <div className="flex border-b border-gray-100">
             {data.kpis.slice(0, 4).map((kpi, i) => (
-              <div key={i} className="flex-1 px-4 py-4 text-center border-r last:border-r-0 border-gray-100">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{kpi.label}</p>
-                <p className="text-3xl font-extrabold leading-none" style={{ color: kpi.color }}>{kpi.value}</p>
-                {kpi.subtitle && <p className="text-[11px] text-gray-400 mt-1">{kpi.subtitle}</p>}
+              <div key={i} className="flex-1 px-4 py-4 text-center border-r last:border-r-0 border-gray-100 relative overflow-hidden group hover:bg-gray-50/50 transition-colors">
+                {/* Colored top accent bar */}
+                <div className="absolute top-0 left-0 right-0 h-[3px] rounded-b-sm opacity-80" style={{ background: kpi.color }} />
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5 mt-1">{kpi.label}</p>
+                <p className="text-2xl font-extrabold leading-none tabular-nums" style={{ color: kpi.color }}>{kpi.value}</p>
+                {kpi.subtitle && (
+                  <p className="text-[11px] text-gray-400 mt-1.5 leading-tight">{kpi.subtitle}</p>
+                )}
               </div>
             ))}
           </div>
@@ -398,11 +631,20 @@ function DashboardMessage({ content, toolCalls, department, onFollowUp }: {
         {/* Chart + Insights Row */}
         <div className={`grid ${data.segments.length > 0 ? "md:grid-cols-5" : "grid-cols-1"} border-b border-gray-100`}>
           {data.segments.length > 0 && (
-            <div className="md:col-span-2 flex flex-col items-center justify-center p-5 border-r border-gray-100 bg-gray-50/30">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
-                {department === "logistics" ? "Fleet distribution" : "Distribution"}
-              </p>
-              <DonutChart segments={data.segments} centerLabel={centerLabel} />
+            <div className="md:col-span-2 flex flex-col items-center p-5 border-r border-gray-100 bg-gray-50/30 gap-4">
+              <div className="w-full">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-3 text-center">
+                  {department === "logistics" ? "Fleet distribution" : "Distribution"}
+                </p>
+                <DonutChart segments={data.segments} centerLabel={centerLabel} />
+              </div>
+              {/* Bar chart breakdown below donut */}
+              {data.segments.length > 1 && (
+                <div className="w-full border-t border-gray-100 pt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Breakdown</p>
+                  <BarChart segments={data.segments} />
+                </div>
+              )}
             </div>
           )}
           <div className={`${data.segments.length > 0 ? "md:col-span-3" : ""} p-5`}>
@@ -433,6 +675,9 @@ function DashboardMessage({ content, toolCalls, department, onFollowUp }: {
             </div>
           </div>
         </div>
+
+        {/* Recharts Analytics Panel */}
+        <AnalyticsPanel analytics={buildAnalytics(toolCalls, department)} />
 
         {/* Data Table (collapsible) */}
         {data.tables.length > 0 && data.tables.some(t => t.rows.length > 0) && (
@@ -534,6 +779,12 @@ function ChatPageContent() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [greeting, setGreeting] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
+  /** Text chunks that have arrived so far in the current streaming response */
+  const [streamingContent, setStreamingContent] = useState("");
+  /** Name of the tool currently being executed (shown during tool calls) */
+  const [streamingToolStatus, setStreamingToolStatus] = useState<string | null>(null);
+  /** Ref that mirrors streamingContent so the finally-block can read the latest value */
+  const streamingContentRef = useRef("");
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -568,8 +819,18 @@ function ChatPageContent() {
         )
       );
     }).catch(() => { /* Slack not connected */ });
-    // Clear slack_connected param from URL after OAuth redirect
-    if (searchParams.get("slack_connected")) {
+    // Check QuickBooks connection status
+    api.getQuickBooksStatus(dept).then(() => {
+      setIntegrations((prev) =>
+        prev.map((integ) =>
+          integ.connectType === "quickbooks"
+            ? { ...integ, active: true, connected: true }
+            : integ
+        )
+      );
+    }).catch(() => { /* QuickBooks not connected */ });
+    // Clear OAuth redirect params from URL
+    if (searchParams.get("slack_connected") || searchParams.get("email_connected") || searchParams.get("quickbooks_connected")) {
       window.history.replaceState({}, "", "/chat");
     }
     loadConversations();
@@ -652,38 +913,133 @@ function ChatPageContent() {
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const msg = overrideMessage || input.trim();
     if (!msg || loading) return;
+
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
       recognitionRef.current = null;
     }
     if (!overrideMessage) setInput("");
+
     setMessages((prev) => [...prev, { role: "user", content: msg }]);
     setLoading(true);
+    streamingContentRef.current = "";
+    setStreamingContent("");
+    setStreamingToolStatus(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    let finalConvId: string | undefined;
+    let finalToolCalls: Record<string, unknown>[] | undefined;
+
+    // ── Frontend retry logic ──────────────────────────────────────────────
+    // Retry the request up to 3 times (with exponential back-off) when the
+    // connection fails BEFORE any text has been streamed. Once text has
+    // started arriving we never retry (partial output is already visible).
+    const MAX_ATTEMPTS = 3;
+    let lastError: unknown = null;
+
     try {
-      const res = await api.sendMessage(msg, conversationId || undefined, controller.signal);
-      setConversationId(res.conversation_id);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: res.message, tool_calls: res.tool_calls },
-      ]);
-      loadConversations();
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // Reset streamed content at the start of each attempt
+        streamingContentRef.current = "";
+        setStreamingContent("");
+        setStreamingToolStatus(null);
+        lastError = null;
+
+        try {
+          await api.streamMessage(
+            msg,
+            conversationId || undefined,
+            {
+              onConversationId: (id) => {
+                // Set immediately so follow-up messages use the right conversation
+                finalConvId = id;
+                setConversationId(id);
+              },
+              onChunk: (text) => {
+                streamingContentRef.current += text;
+                setStreamingContent((prev) => prev + text);
+                setStreamingToolStatus(null);
+              },
+              onToolStatus: (tool) => {
+                setStreamingToolStatus(tool);
+              },
+              onDone: (data) => {
+                finalConvId = data.conversation_id;
+                finalToolCalls = data.tool_calls;
+              },
+              onError: (error) => {
+                // Server-side error event — treat as terminal, no retry
+                setMessages((prev) => [
+                  ...prev,
+                  { role: "assistant", content: `Sorry, I encountered an error: ${error}` },
+                ]);
+                streamingContentRef.current = "";
+              },
+            },
+            controller.signal
+          );
+          break; // success — exit retry loop
+        } catch (err: unknown) {
+          // User clicked Stop — never retry
+          if (err instanceof DOMException && err.name === "AbortError") throw err;
+
+          // If text was already streaming, don't retry (partial output visible)
+          if (streamingContentRef.current.length > 0) throw err;
+
+          lastError = err;
+
+          if (attempt < MAX_ATTEMPTS) {
+            const delayMs = Math.pow(2, attempt - 1) * 1000; // 1 s, 2 s
+            setStreamingToolStatus(`Connection issue — retrying (${attempt}/${MAX_ATTEMPTS - 1})…`);
+            await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+          }
+        }
+      }
+
+      // All retries exhausted
+      if (lastError) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `Error: ${lastError instanceof Error ? lastError.message : "Failed to get response after multiple attempts. Please try again."}`,
+          },
+        ]);
+        streamingContentRef.current = "";
+      }
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        // User cancelled — no error message needed
-      } else {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        // Unexpected throw (e.g. mid-stream network drop after text started)
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: `Error: ${err instanceof Error ? err.message : "Failed to get response"}` },
         ]);
+        streamingContentRef.current = "";
       }
+      // AbortError = user clicked Stop — fall through to finally to commit partial text
     } finally {
+      const content = streamingContentRef.current;
+      if (content) {
+        // Commit whatever was streamed (full response or partial if stopped early)
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content,
+            tool_calls: finalToolCalls?.length ? finalToolCalls : undefined,
+          },
+        ]);
+      }
+      if (finalConvId) setConversationId(finalConvId);
+      streamingContentRef.current = "";
+      setStreamingContent("");
+      setStreamingToolStatus(null);
       abortControllerRef.current = null;
       setLoading(false);
+      loadConversations();
     }
   }, [input, loading, conversationId]);
 
@@ -778,6 +1134,7 @@ function ChatPageContent() {
                         try {
                           if (integ.connectType === "slack") await api.disconnectDepartmentSlack(department);
                           else if (integ.connectType === "gmail" || integ.connectType === "outlook") await api.disconnectDepartmentEmail(department);
+                          else if (integ.connectType === "quickbooks") await api.disconnectDepartmentQuickBooks(department);
                           setIntegrations((prev) => prev.map((i) => i.id === integ.id && i.department === integ.department ? { ...i, active: false, connected: false } : i));
                         } catch { /* ignore */ }
                       }}
@@ -802,36 +1159,44 @@ function ChatPageContent() {
               return (
                 <div key={integ.id} className="mb-1">
                   {canConnect ? (
-                    // Admin: show Connect button
+                    // Admin: show Connect button with orange-red accent
                     <button
                       onClick={async () => {
                         try {
                           if (integ.connectType === "slack") {
                             const { auth_url } = await api.connectDepartmentSlack(department);
                             window.location.href = auth_url;
+                          } else if (integ.connectType === "gmail" || integ.connectType === "outlook") {
+                            const { auth_url } = await api.connectDepartmentEmail(department, integ.connectType);
+                            window.location.href = auth_url;
+                          } else if (integ.connectType === "quickbooks") {
+                            const { auth_url } = await api.connectDepartmentQuickBooks(department);
+                            window.location.href = auth_url;
                           }
-                        } catch {
-                          // ignore
-                        }
+                        } catch { /* ignore */ }
                       }}
-                      className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 border border-dashed border-gray-300 hover:border-brand-teal/50 hover:bg-brand-teal/5 transition group"
+                      className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 border border-dashed border-red-200 bg-red-50/40 hover:border-brand-teal/50 hover:bg-brand-teal/5 transition group"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-brand-teal/10 flex items-center justify-center text-base text-gray-400 transition">
+                      <div className="w-8 h-8 rounded-lg bg-red-50 group-hover:bg-brand-teal/10 flex items-center justify-center text-red-400 group-hover:text-brand-teal transition">
                         {integ.icon}
                       </div>
-                      <span className="text-sm text-gray-400 group-hover:text-brand-teal flex-1 text-left transition">{integ.name}</span>
-                      <span className="text-[10px] font-semibold text-brand-teal bg-brand-teal/10 rounded-full px-2 py-0.5">Connect</span>
+                      <div className="flex-1 text-left">
+                        <span className="text-sm text-gray-500 group-hover:text-brand-teal transition">{integ.name}</span>
+                        <p className="text-[10px] text-red-400 group-hover:text-brand-teal/70 transition">Not connected</p>
+                      </div>
+                      <span className="text-[10px] font-semibold text-white bg-brand-teal rounded-full px-2.5 py-1 shadow-sm">Connect</span>
                     </button>
                   ) : (
-                    // Regular user: locked
-                    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 opacity-40 cursor-not-allowed">
-                      <div className="w-8 h-8 rounded-lg bg-gray-200 flex items-center justify-center text-gray-400 text-base">
+                    // Regular user: red "Disconnected" indicator
+                    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 border border-red-100 bg-red-50/30">
+                      <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-300 text-base">
                         {integ.icon}
                       </div>
-                      <span className="text-sm text-gray-400 flex-1">{integ.name}</span>
-                      <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-gray-400 block truncate">{integ.name}</span>
+                        <span className="text-[10px] text-red-400">Not connected</span>
+                      </div>
+                      <span className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0" title="Disconnected" />
                     </div>
                   )}
                 </div>
@@ -959,7 +1324,9 @@ function ChatPageContent() {
               </p>
 
               {/* Quick Action Prompts */}
-              {quickPrompts.length > 0 && (
+              {department === "logistics" ? (
+                <LogisticsWelcome onSend={handleSend} />
+              ) : quickPrompts.length > 0 && (
                 <div className="w-full max-w-2xl">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
                     Get started with an example below
@@ -1077,7 +1444,70 @@ function ChatPageContent() {
               </div>
             ))}
 
-            {loading && (
+            {/* ── Streaming text (chunks arriving) ── */}
+            {loading && streamingContent && (
+              <div className="flex justify-start">
+                <div className="flex items-start gap-3 max-w-[90%]">
+                  <div className="w-8 h-8 rounded-xl bg-brand-gradient flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+                    <svg className="w-4 h-4 text-white" viewBox="0 0 172 172" fill="none">
+                      <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="currentColor" />
+                    </svg>
+                  </div>
+                  <div className="rounded-2xl rounded-tl-md bg-white border border-gray-200/60 shadow-sm px-5 py-4 overflow-hidden">
+                    <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-p:leading-relaxed prose-headings:my-2 prose-headings:text-brand-navy prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-strong:text-brand-navy prose-table:my-0 prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-xl prose-code:text-brand-teal prose-code:bg-brand-teal/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-a:text-brand-teal prose-a:no-underline hover:prose-a:underline">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          table: ({ children, ...props }) => (
+                            <div className="my-3 overflow-x-auto rounded-xl border border-gray-200/80 shadow-sm">
+                              <table className="w-full text-xs" {...props}>{children}</table>
+                            </div>
+                          ),
+                          thead: ({ children, ...props }) => (
+                            <thead className="bg-gradient-to-r from-brand-navy to-brand-teal text-white" {...props}>{children}</thead>
+                          ),
+                          th: ({ children, ...props }) => (
+                            <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap" {...props}>{children}</th>
+                          ),
+                          td: ({ children, ...props }) => (
+                            <td className="px-3 py-2 text-gray-700 whitespace-nowrap border-b border-gray-100" {...props}>{children}</td>
+                          ),
+                          tr: ({ children, ...props }) => (
+                            <tr className="hover:bg-brand-teal/[0.03] transition-colors" {...props}>{children}</tr>
+                          ),
+                          h1: ({ children, ...props }) => (
+                            <h1 className="text-lg font-bold text-brand-navy flex items-center gap-2" {...props}>{children}</h1>
+                          ),
+                          h2: ({ children, ...props }) => (
+                            <h2 className="text-base font-bold text-brand-navy flex items-center gap-2 mt-4 mb-2" {...props}>{children}</h2>
+                          ),
+                          h3: ({ children, ...props }) => (
+                            <h3 className="text-sm font-bold text-brand-navy mt-3 mb-1" {...props}>{children}</h3>
+                          ),
+                          ul: ({ children, ...props }) => (
+                            <ul className="space-y-1 my-2" {...props}>{children}</ul>
+                          ),
+                          li: ({ children, ...props }) => (
+                            <li className="text-gray-700 leading-relaxed" {...props}>{children}</li>
+                          ),
+                          blockquote: ({ children, ...props }) => (
+                            <blockquote className="border-l-3 border-brand-teal bg-brand-teal/5 rounded-r-lg px-4 py-2 my-2 text-gray-600 italic" {...props}>{children}</blockquote>
+                          ),
+                          hr: () => <hr className="my-3 border-gray-200/60" />,
+                        }}
+                      >
+                        {streamingContent}
+                      </ReactMarkdown>
+                      {/* Blinking cursor to indicate text is still arriving */}
+                      <span className="inline-block w-[2px] h-[1em] bg-brand-teal ml-0.5 animate-pulse align-middle rounded-sm" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Waiting indicator (before first chunk, or during tool execution) ── */}
+            {loading && !streamingContent && (
               <div className="flex justify-start">
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-xl bg-brand-gradient flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
@@ -1086,14 +1516,25 @@ function ChatPageContent() {
                     </svg>
                   </div>
                   <div className="rounded-2xl rounded-tl-md bg-white border border-gray-200/60 px-5 py-4 text-sm shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="flex gap-1">
-                        <span className="w-2 h-2 rounded-full bg-brand-teal animate-bounce" style={{ animationDelay: "0ms" }}></span>
-                        <span className="w-2 h-2 rounded-full bg-brand-teal animate-bounce" style={{ animationDelay: "150ms" }}></span>
-                        <span className="w-2 h-2 rounded-full bg-brand-teal animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                    {streamingToolStatus ? (
+                      /* Tool execution status */
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-brand-teal animate-pulse flex-shrink-0" />
+                        <span className="text-gray-500 text-xs">
+                          Using {streamingToolStatus.replace(/_/g, " ")}…
+                        </span>
                       </div>
-                      <span className="text-gray-400 text-xs">Analyzing your request...</span>
-                    </div>
+                    ) : (
+                      /* Bouncing dots while waiting for first token */
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1">
+                          <span className="w-2 h-2 rounded-full bg-brand-teal animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="w-2 h-2 rounded-full bg-brand-teal animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="w-2 h-2 rounded-full bg-brand-teal animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </div>
+                        <span className="text-gray-400 text-xs">Analyzing your request…</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

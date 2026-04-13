@@ -2,6 +2,7 @@ import type { Integration } from "./types";
 
 export function getIntegrations(userDept: string): Integration[] {
   const all: Integration[] = [
+    // ── Logistics ────────────────────────────────────────────────────────────
     {
       id: "fleethunt",
       name: "FleetHunt",
@@ -21,6 +22,17 @@ export function getIntegrations(userDept: string): Integration[] {
       color: "#14b8a6",
     },
     {
+      id: "highway",
+      name: "Highway",
+      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>,
+      active: false,
+      department: "logistics",
+      connected: false,
+      color: "#6366f1",
+    },
+
+    // ── Restaurant ───────────────────────────────────────────────────────────
+    {
       id: "restaurant-pos",
       name: "Restaurant POS",
       icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513M15 8.25v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m15-3.38a48.474 48.474 0 00-6-.37c-2.032 0-4.034.126-6 .37m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.17c0 .62-.504 1.124-1.125 1.124H4.125A1.125 1.125 0 013 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 016 13.12M12.265 3.11a.375.375 0 11-.53 0L12 2.845l.265.265zm-3 0a.375.375 0 11-.53 0L9 2.845l.265.265zm6 0a.375.375 0 11-.53 0L15 2.845l.265.265z" /></svg>,
@@ -29,6 +41,8 @@ export function getIntegrations(userDept: string): Integration[] {
       connected: true,
       color: "#f97316",
     },
+
+    // ── Finance ──────────────────────────────────────────────────────────────
     {
       id: "quickbooks",
       name: "QuickBooks",
@@ -37,15 +51,8 @@ export function getIntegrations(userDept: string): Integration[] {
       department: "finance",
       connected: false,
       color: "#22c55e",
-    },
-    {
-      id: "highway",
-      name: "Highway",
-      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>,
-      active: false,
-      department: "logistics",
-      connected: false,
-      color: "#6366f1",
+      oauthRequired: true,
+      connectType: "quickbooks",
     },
     {
       id: "triumph",
@@ -56,6 +63,19 @@ export function getIntegrations(userDept: string): Integration[] {
       connected: false,
       color: "#8b5cf6",
     },
+
+    // ── Shared (all departments) ──────────────────────────────────────────────
+    {
+      id: "slack",
+      name: "Slack",
+      icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 01-2.52 2.523A2.528 2.528 0 010 15.165a2.527 2.527 0 012.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 012.521-2.52 2.527 2.527 0 012.521 2.52v6.313A2.528 2.528 0 018.834 24a2.528 2.528 0 01-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 01-2.521-2.52A2.528 2.528 0 018.834 0a2.528 2.528 0 012.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 012.521 2.521 2.528 2.528 0 01-2.521 2.521H2.522A2.528 2.528 0 010 8.834a2.528 2.528 0 012.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 012.522-2.521A2.528 2.528 0 0124 8.834a2.528 2.528 0 01-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 01-2.523 2.521 2.527 2.527 0 01-2.52-2.521V2.522A2.527 2.527 0 0115.165 0a2.528 2.528 0 012.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 012.523 2.522A2.528 2.528 0 0115.165 24a2.527 2.527 0 01-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 01-2.52-2.523 2.526 2.526 0 012.52-2.52h6.313A2.527 2.527 0 0124 15.165a2.528 2.528 0 01-2.522 2.523h-6.313z" /></svg>,
+      active: false,
+      department: "__all__",
+      connected: false,
+      color: "#4A154B",
+      oauthRequired: true,
+      connectType: "slack",
+    },
     {
       id: "gmail",
       name: "Gmail",
@@ -64,6 +84,8 @@ export function getIntegrations(userDept: string): Integration[] {
       department: "__all__",
       connected: false,
       color: "#EA4335",
+      oauthRequired: true,
+      connectType: "gmail",
     },
     {
       id: "outlook",
@@ -73,6 +95,8 @@ export function getIntegrations(userDept: string): Integration[] {
       department: "__all__",
       connected: false,
       color: "#0078D4",
+      oauthRequired: true,
+      connectType: "outlook",
     },
   ];
 

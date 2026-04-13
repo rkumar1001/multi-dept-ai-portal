@@ -69,24 +69,38 @@ async def connect_quickbooks(
 
 @router.get("/callback")
 async def quickbooks_callback(
-    code: str = Query(...),
-    state: str = Query(...),
-    realmId: str = Query(...),
+    code: str = Query(None),
+    state: str = Query(None),
+    realmId: str = Query(None),
+    error: str = Query(None),
+    error_description: str = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """OAuth callback — exchanges code for tokens and stores config."""
+    frontend_url = settings.frontend_url
+
+    # Intuit may return error param if user denies access
+    if error:
+        msg = error_description or error
+        logger.warning("QuickBooks OAuth denied: %s", msg)
+        return RedirectResponse(url=f"{frontend_url}/admin?quickbooks_error={msg}")
+
+    if not code or not state or not realmId:
+        return RedirectResponse(url=f"{frontend_url}/admin?quickbooks_error=Missing+OAuth+parameters")
+
     try:
         state_data = _decode_state(state)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error("QuickBooks bad state: %s", e)
+        return RedirectResponse(url=f"{frontend_url}/admin?quickbooks_error=Invalid+state+parameter")
 
     department = state_data["department"]
 
     try:
         tokens = await exchange_quickbooks_code(code)
     except Exception as e:
-        logger.error("QuickBooks OAuth failed for %s: %s", department, e)
-        raise HTTPException(status_code=400, detail=f"QuickBooks OAuth failed: {e}")
+        logger.error("QuickBooks token exchange failed for %s: %s", department, e)
+        return RedirectResponse(url=f"{frontend_url}/admin?quickbooks_error=Token+exchange+failed")
 
     # Upsert — delete existing config for this department, then insert new
     await db.execute(
@@ -107,7 +121,6 @@ async def quickbooks_callback(
 
     logger.info("QuickBooks connected for %s: realmId=%s", department, realmId)
 
-    frontend_url = settings.cors_origins.split(",")[0]
     return RedirectResponse(url=f"{frontend_url}/admin?quickbooks_connected={department}")
 
 

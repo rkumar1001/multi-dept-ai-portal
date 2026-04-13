@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     app_port: int = 8000
     secret_key: str = "change-me-to-a-random-secret-key-at-least-32-chars"
     cors_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+    frontend_url: str = "http://localhost:3000"
 
     database_url: str = f"sqlite+aiosqlite:///{Path(__file__).resolve().parent.parent / 'ai_portal.db'}"
 

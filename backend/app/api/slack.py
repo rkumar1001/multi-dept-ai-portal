@@ -64,15 +64,26 @@ async def connect_slack(
 
 @router.get("/callback")
 async def slack_callback(
-    code: str = Query(...),
-    state: str = Query(...),
+    code: str = Query(None),
+    state: str = Query(None),
+    error: str = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """OAuth callback — exchanges code for bot token and stores config."""
+    frontend_url = settings.frontend_url
+
+    if error:
+        logger.warning("Slack OAuth denied: %s", error)
+        return RedirectResponse(url=f"{frontend_url}/admin?slack_error={error}")
+
+    if not code or not state:
+        return RedirectResponse(url=f"{frontend_url}/admin?slack_error=Missing+OAuth+parameters")
+
     try:
         state_data = _decode_state(state)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error("Slack bad state: %s", e)
+        return RedirectResponse(url=f"{frontend_url}/admin?slack_error=Invalid+state+parameter")
 
     department = state_data["department"]
 
@@ -80,7 +91,7 @@ async def slack_callback(
         tokens = await exchange_slack_code(code)
     except Exception as e:
         logger.error("Slack OAuth failed for %s: %s", department, e)
-        raise HTTPException(status_code=400, detail=f"Slack OAuth failed: {e}")
+        return RedirectResponse(url=f"{frontend_url}/admin?slack_error=Token+exchange+failed")
 
     # Upsert — delete existing config for this department, then insert new
     await db.execute(
@@ -100,8 +111,7 @@ async def slack_callback(
 
     logger.info("Slack connected for %s: workspace=%s", department, tokens["team_name"])
 
-    frontend_url = settings.cors_origins.split(",")[0]
-    return RedirectResponse(url=f"{frontend_url}/chat?slack_connected={department}")
+    return RedirectResponse(url=f"{frontend_url}/admin?slack_connected={department}")
 
 
 @router.get("/status/{department}", response_model=SlackStatusResponse)

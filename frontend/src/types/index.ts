@@ -20,6 +20,8 @@ export interface ChatMessage {
   content: string;
   tool_calls?: Record<string, unknown>[] | null;
   created_at?: string;
+  /** True while this message is still being streamed in */
+  isStreaming?: boolean;
 }
 
 export interface Conversation {

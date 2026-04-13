@@ -4,6 +4,7 @@ import base64
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from sqlalchemy import select
@@ -30,7 +31,7 @@ def get_quickbooks_auth_url(state: str) -> str:
         "redirect_uri": settings.quickbooks_redirect_uri,
         "state": state,
     }
-    return f"{QB_AUTH_URL}?{'&'.join(f'{k}={v}' for k, v in params.items())}"
+    return f"{QB_AUTH_URL}?{urlencode(params)}"
 
 
 def _auth_header() -> str:
