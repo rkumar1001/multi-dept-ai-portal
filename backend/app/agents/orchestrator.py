@@ -55,7 +55,7 @@ class AgentResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     tool_calls: list[dict] = field(default_factory=list)
-    model: str = "claude-haiku-4-5-20251001"
+    model: str = ""
 
 
 class AgentOrchestrator:
@@ -63,7 +63,7 @@ class AgentOrchestrator:
 
     def __init__(self):
         self.client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        self.model = "claude-haiku-4-5-20251001"
+        self.model = settings.claude_model
 
     # ── Retry helper ──────────────────────────────────────────────────────────
 

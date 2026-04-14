@@ -12,9 +12,12 @@ from sse_starlette.sse import EventSourceResponse
 from app.agents.orchestrator import get_orchestrator
 from app.api.upload import read_upload_as_text
 from app.db.database import get_db
+from app.config import get_settings
 from app.middleware.auth_middleware import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
 from app.services.usage_service import record_usage
+
+_settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +256,7 @@ async def stream_chat(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 tool_calls_count=len(tool_calls),
-                model="claude-sonnet-4-5-20250929",
+                model=_settings.claude_model,
             )
 
         yield {
