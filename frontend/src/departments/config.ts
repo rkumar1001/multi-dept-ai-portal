@@ -42,18 +42,21 @@ export const DEPARTMENT_PROMPTS: Record<string, QuickPrompt[]> = {
     { icon: "🏆", label: "Top Deals", description: "Highest value opportunities", prompt: "Show me the top deals this quarter by value and their win probability." },
     { icon: "📧", label: "Follow-up Reminders", description: "Pending email follow-ups", prompt: "Search recent email logs and identify contacts that need follow-up." },
     { icon: "🔍", label: "Market Analysis", description: "Competitive intelligence", prompt: "What are the latest market trends and competitive insights for our industry?" },
+    { icon: "🌤️", label: "Weather Check", description: "Weather for event planning", prompt: "What's the weather like in Toronto today and for the next 7 days?" },
   ],
   finance: [
     { icon: "💵", label: "Cash Flow Forecast", description: "30-day cash flow projection", prompt: "Generate a cash flow forecast for the next 30 days." },
     { icon: "📊", label: "Revenue vs Budget", description: "Compare actuals to plan", prompt: "Query the ERP for current revenue and compare against our budget targets." },
     { icon: "⚠️", label: "Compliance Check", description: "Regulatory compliance status", prompt: "Run a compliance check across all active financial regulations." },
     { icon: "🏦", label: "GL Account Summary", description: "General ledger overview", prompt: "Show me the general ledger account balances for this quarter." },
+    { icon: "🌤️", label: "Weather Check", description: "Weather for operations", prompt: "What's the current weather in Toronto and the 7-day forecast?" },
   ],
   accounting: [
     { icon: "🧾", label: "Pending Invoices", description: "Overdue and upcoming invoices", prompt: "Query all pending and overdue invoices with aging analysis." },
     { icon: "🔄", label: "Account Reconciliation", description: "Reconcile accounts receivable", prompt: "Reconcile accounts receivable for this month and flag discrepancies." },
     { icon: "💰", label: "Tax Calculation", description: "Estimate tax liability", prompt: "Calculate the estimated tax liability for the current quarter with effective rates." },
     { icon: "📑", label: "Expense Report", description: "Categorized expense summary", prompt: "Show me a categorized breakdown of expenses for the current period." },
+    { icon: "🌤️", label: "Weather Check", description: "Weather conditions", prompt: "What's the weather in Toronto right now and the 7-day outlook?" },
   ],
   restaurant: [
     { icon: "📋", label: "Full Menu", description: "Browse The Masala Twist menu", prompt: "Show me the full menu with all categories, items, and prices." },
@@ -62,6 +65,7 @@ export const DEPARTMENT_PROMPTS: Record<string, QuickPrompt[]> = {
     { icon: "📦", label: "Recent Orders", description: "View latest orders", prompt: "Show me the most recent orders with their details and totals." },
     { icon: "📊", label: "Order Stats", description: "Order analytics", prompt: "Get the order statistics and analytics overview." },
     { icon: "🍗", label: "Chicken Dishes", description: "All chicken curries & tandoori", prompt: "Show me all the chicken dishes including curries and tandoori items." },
+    { icon: "🌤️", label: "Weather Check", description: "Weather for outdoor seating", prompt: "What's the weather like in Toronto today? Good for outdoor dining?" },
   ],
   logistics: [
     { icon: "🗺️", label: "Fleet Overview", description: "All vehicles with live status", prompt: "Give me a summary of the entire fleet — how many vehicles are moving, idle, and stopped?" },
@@ -74,6 +78,7 @@ export const DEPARTMENT_PROMPTS: Record<string, QuickPrompt[]> = {
     { icon: "📊", label: "Fleet Utilization", description: "Active vs parked ratio", prompt: "What percentage of the fleet is actively being used right now? Break down by moving, idle, and stopped." },
     { icon: "🛣️", label: "Route Activity", description: "Vehicles by region", prompt: "Find all vehicles within 25 km of Montreal (45.50, -73.57) and show their status." },
     { icon: "📋", label: "Full Fleet List", description: "All vehicles with details", prompt: "Show me a complete list of all vehicles with their current status, speed, and last update time." },
+    { icon: "🌤️", label: "Weather Check", description: "Weather for route planning", prompt: "What's the weather in Toronto and the 7-day forecast? Any conditions that could affect deliveries?" },
   ],
 };
 

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite+aiosqlite:///{Path(__file__).resolve().parent.parent / 'ai_portal.db'}"
 
     anthropic_api_key: str = ""
+    claude_model: str = "claude-haiku-4-5"
 
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60

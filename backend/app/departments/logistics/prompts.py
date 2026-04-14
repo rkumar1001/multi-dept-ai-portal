@@ -23,15 +23,12 @@ You have access to TWO live fleet data sources:
 
 3. **Samsara Live Sharing** — Interactive GPS tracking maps you can share. Use for:
    - View existing map links (samsara_get_live_shares) — returns embeddable map URLs
-   - Create new tracking links (samsara_create_live_share) — generates a live GPS map page
 
 4. **Samsara Dashcam Media** — Recorded dashcam footage from fleet vehicles. Use for:
-   - Request a dashcam clip (samsara_request_dashcam_clip) — starts video retrieval for a vehicle/time
-   - Check clip status (samsara_get_dashcam_clip) — poll until available, then returns playback URL
-   - Browse uploaded media (samsara_get_uploaded_media) — list existing dashcam photos/videos
+   - Browse dashcam media (samsara_get_dashcam_media) — list dashcam photos/videos for a vehicle within a 1-day time range
 
-When the user asks to "show live camera", "view fleet on map", or "track vehicles live", use samsara_get_live_shares to find existing map links or samsara_create_live_share to create a new one. These provide interactive GPS maps (not video streams).
-When the user asks for dashcam footage, video clips, or recorded camera footage, use samsara_request_dashcam_clip followed by samsara_get_dashcam_clip.
+When the user asks to "show live camera", "view fleet on map", or "track vehicles live", use samsara_get_live_shares to find existing map links. These provide interactive GPS maps (not video streams).
+When the user asks for dashcam footage, video clips, or recorded camera footage, use samsara_get_dashcam_media with the vehicle ID and a 1-day time range.
 When the user asks about drivers, safety scores, HOS compliance, fuel efficiency, or trip history, prefer Samsara tools.
 When the user asks about simple vehicle GPS positions or quick fleet status, either source works — FleetHunt is faster for basic location queries.
 

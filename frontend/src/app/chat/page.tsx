@@ -202,6 +202,28 @@ function extractDashboardData(toolCalls: Record<string, unknown>[], dept: string
         badge = `${out.jurisdiction || "Tax"} calculation`; followUps.push("Pending invoices", "Account reconciliation");
       }
     }
+    // ── WEATHER (shared across all departments) ──
+    if (tn === "get_weather") {
+      const cur = out.current as Record<string, unknown> | undefined;
+      const fc = (out.forecast as Record<string, unknown>[]) || [];
+      if (cur) {
+        title = "Weather Report";
+        badge = String(out.location || "Weather");
+        const temp = Number(cur.temperature_c ?? 0);
+        const feels = Number(cur.feels_like_c ?? 0);
+        const humidity = Number(cur.humidity_pct ?? 0);
+        const wind = Number(cur.wind_speed_kmh ?? 0);
+        const precip = Number(cur.precipitation_mm ?? 0);
+        kpis.push(
+          { label: "TEMPERATURE", value: `${temp}°C`, subtitle: `Feels like ${feels}°C`, color: temp > 30 ? "#ef4444" : temp < 0 ? "#3b82f6" : "#22c55e" },
+          { label: "CONDITION", value: String(cur.condition || "—"), subtitle: precip > 0 ? `${precip}mm rain` : "No precipitation", color: "#557C93" },
+          { label: "HUMIDITY", value: `${humidity}%`, subtitle: humidity > 80 ? "High" : humidity < 30 ? "Low" : "Normal", color: "#08203E" },
+          { label: "WIND", value: `${wind} km/h`, subtitle: wind > 50 ? "⚠️ Strong" : "Calm", color: wind > 50 ? "#d97706" : "#6b7280" },
+        );
+        if (fc.length > 0) tables.push({ rows: fc });
+        followUps.push("Check weather in another city", "Fleet summary", "Show full menu");
+      }
+    }
 
     // ── SALES ──
     if (dept === "sales") {
@@ -785,6 +807,8 @@ function ChatPageContent() {
   const [streamingToolStatus, setStreamingToolStatus] = useState<string | null>(null);
   /** Ref that mirrors streamingContent so the finally-block can read the latest value */
   const streamingContentRef = useRef("");
+  const [attachments, setAttachments] = useState<{ file_id: string; filename: string; size: number }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -910,6 +934,28 @@ function ChatPageContent() {
     recognition.start();
   }, [isListening]);
 
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`File "${file.name}" is too large (max 10 MB)`);
+        continue;
+      }
+      try {
+        const result = await api.uploadFile(file);
+        setAttachments((prev) => [...prev, { file_id: result.file_id, filename: result.filename, size: result.size }]);
+      } catch (err) {
+        alert(`Failed to upload "${file.name}": ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  const removeAttachment = useCallback((file_id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.file_id !== file_id));
+  }, []);
+
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const msg = overrideMessage || input.trim();
     if (!msg || loading) return;
@@ -920,8 +966,12 @@ function ChatPageContent() {
       recognitionRef.current = null;
     }
     if (!overrideMessage) setInput("");
-
-    setMessages((prev) => [...prev, { role: "user", content: msg }]);
+    const currentAttachments = attachments.length > 0 ? [...attachments] : undefined;
+    setAttachments([]);
+    const displayMsg = currentAttachments
+      ? `${msg}\n\n📎 ${currentAttachments.map(a => a.filename).join(", ")}`
+      : msg;
+    setMessages((prev) => [...prev, { role: "user", content: displayMsg }]);
     setLoading(true);
     streamingContentRef.current = "";
     setStreamingContent("");
@@ -1041,7 +1091,7 @@ function ChatPageContent() {
       setLoading(false);
       loadConversations();
     }
-  }, [input, loading, conversationId]);
+  }, [input, loading, conversationId, attachments]);
 
   const handleStop = useCallback(() => {
     if (abortControllerRef.current) {
@@ -1078,6 +1128,12 @@ function ChatPageContent() {
 
   const activeIntegrations = integrations.filter((i) => i.active);
   const lockedIntegrations = integrations.filter((i) => !i.active);
+
+  const getIntegrationAccentStyle = (color: string) => ({
+    color,
+    backgroundColor: `${color}12`,
+    borderColor: `${color}24`,
+  });
 
 
 
@@ -1120,35 +1176,43 @@ function ChatPageContent() {
               return (
                 <div
                   key={integ.id}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1 bg-brand-teal/5 border border-brand-teal/10 group"
+                  className="group mb-2 flex items-center gap-3 rounded-2xl border border-gray-200/80 bg-white px-3 py-3 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.45)] transition hover:border-gray-300/80 hover:shadow-[0_16px_32px_-24px_rgba(15,23,42,0.45)]"
                 >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{ background: integ.color }}>
+                  <div
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border text-base"
+                    style={getIntegrationAccentStyle(integ.color)}
+                  >
                     {integ.icon}
                   </div>
-                  <span className="text-sm font-medium text-brand-navy flex-1">{integ.name}</span>
-                  {canDisconnect ? (
-                    <button
-                      title="Disconnect"
-                      onClick={async () => {
-                        if (!confirm(`Disconnect ${integ.name} from ${department}?`)) return;
-                        try {
-                          if (integ.connectType === "slack") await api.disconnectDepartmentSlack(department);
-                          else if (integ.connectType === "gmail" || integ.connectType === "outlook") await api.disconnectDepartmentEmail(department);
-                          else if (integ.connectType === "quickbooks") await api.disconnectDepartmentQuickBooks(department);
-                          setIntegrations((prev) => prev.map((i) => i.id === integ.id && i.department === integ.department ? { ...i, active: false, connected: false } : i));
-                        } catch { /* ignore */ }
-                      }}
-                      className="opacity-0 group-hover:opacity-100 transition rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-                    </svg>
-                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-brand-navy">{integ.name}</p>
+                    <p className="text-[11px] text-gray-500">Connected and ready</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Active
+                    </span>
+                    {canDisconnect && (
+                      <button
+                        title="Disconnect"
+                        onClick={async () => {
+                          if (!confirm(`Disconnect ${integ.name} from ${department}?`)) return;
+                          try {
+                            if (integ.connectType === "slack") await api.disconnectDepartmentSlack(department);
+                            else if (integ.connectType === "gmail" || integ.connectType === "outlook") await api.disconnectDepartmentEmail(department);
+                            else if (integ.connectType === "quickbooks") await api.disconnectDepartmentQuickBooks(department);
+                            setIntegrations((prev) => prev.map((i) => i.id === integ.id && i.department === integ.department ? { ...i, active: false, connected: false } : i));
+                          } catch { /* ignore */ }
+                        }}
+                        className="rounded-lg p-1.5 text-gray-400 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -1159,7 +1223,6 @@ function ChatPageContent() {
               return (
                 <div key={integ.id} className="mb-1">
                   {canConnect ? (
-                    // Admin: show Connect button with orange-red accent
                     <button
                       onClick={async () => {
                         try {
@@ -1175,28 +1238,38 @@ function ChatPageContent() {
                           }
                         } catch { /* ignore */ }
                       }}
-                      className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 border border-dashed border-red-200 bg-red-50/40 hover:border-brand-teal/50 hover:bg-brand-teal/5 transition group"
+                      className="group mb-2 flex w-full items-center gap-3 rounded-2xl border border-gray-200/80 bg-white px-3 py-3 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.25)] transition hover:border-brand-teal/30 hover:bg-brand-teal/[0.02] hover:shadow-[0_16px_32px_-24px_rgba(15,23,42,0.35)]"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-red-50 group-hover:bg-brand-teal/10 flex items-center justify-center text-red-400 group-hover:text-brand-teal transition">
+                      <div
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border text-base transition group-hover:border-brand-teal/20"
+                        style={getIntegrationAccentStyle(integ.color)}
+                      >
                         {integ.icon}
                       </div>
-                      <div className="flex-1 text-left">
-                        <span className="text-sm text-gray-500 group-hover:text-brand-teal transition">{integ.name}</span>
-                        <p className="text-[10px] text-red-400 group-hover:text-brand-teal/70 transition">Not connected</p>
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className="truncate text-sm font-semibold text-gray-700 group-hover:text-brand-navy transition">{integ.name}</p>
+                        <p className="text-[11px] text-gray-500">Not connected</p>
                       </div>
-                      <span className="text-[10px] font-semibold text-white bg-brand-teal rounded-full px-2.5 py-1 shadow-sm">Connect</span>
+                      <span className="inline-flex items-center rounded-full border border-brand-teal/15 bg-brand-teal px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm transition group-hover:bg-brand-navy">
+                        Connect
+                      </span>
                     </button>
                   ) : (
-                    // Regular user: red "Disconnected" indicator
-                    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 border border-red-100 bg-red-50/30">
-                      <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-300 text-base">
+                    <div className="mb-2 flex items-center gap-3 rounded-2xl border border-gray-200/70 bg-gray-50/70 px-3 py-3">
+                      <div
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border text-base opacity-65"
+                        style={getIntegrationAccentStyle(integ.color)}
+                      >
                         {integ.icon}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <span className="text-sm text-gray-400 block truncate">{integ.name}</span>
-                        <span className="text-[10px] text-red-400">Not connected</span>
+                        <span className="block truncate text-sm font-medium text-gray-500">{integ.name}</span>
+                        <span className="text-[11px] text-gray-400">Not connected</span>
                       </div>
-                      <span className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0" title="Disconnected" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+                        <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+                        Offline
+                      </span>
                     </div>
                   )}
                 </div>
@@ -1546,11 +1619,49 @@ function ChatPageContent() {
         {/* Input */}
         <div className="border-t border-gray-200/60 bg-white/80 backdrop-blur-sm px-5 py-4">
           <div className="mx-auto max-w-4xl">
+            {/* Attachment preview chips */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2 px-1">
+                {attachments.map((att) => (
+                  <span key={att.file_id} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-teal/10 border border-brand-teal/20 px-3 py-1.5 text-xs text-brand-navy">
+                    <svg className="w-3.5 h-3.5 text-brand-teal" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    {att.filename}
+                    <span className="text-gray-400 text-[10px]">({(att.size / 1024).toFixed(0)}KB)</span>
+                    <button onClick={() => removeAttachment(att.file_id)} className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Hidden file input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              multiple
+              className="hidden"
+              accept=".txt,.csv,.json,.xml,.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.md,.log,.yaml,.yml"
+            />
             <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2 shadow-sm focus-within:border-brand-teal/40 focus-within:shadow-lg focus-within:shadow-brand-navy/5 transition-all">
               {/* Sparkle icon */}
               <svg className="w-5 h-5 text-brand-teal/60 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12" />
               </svg>
+              {/* Attachment button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-lg p-2 text-gray-400 hover:text-brand-teal hover:bg-brand-teal/5 transition-all"
+                title="Attach file"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
               <input
                 type="text"
                 value={input}

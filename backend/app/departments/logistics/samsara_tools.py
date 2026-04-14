@@ -5,6 +5,7 @@ HOS compliance, fuel, trips, idling, equipment, live sharing links,
 and dashcam media retrieval.
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -14,6 +15,20 @@ from app.config import get_settings
 # ── Samsara API helper ─────────────────────────────────────────────────────
 
 _BASE_URL = "https://api.samsara.com"
+
+
+def _default_time_range() -> tuple[str, str]:
+    """Return (start_time, end_time) as ISO 8601 strings covering the last 24 hours."""
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(hours=24)
+    return start.strftime("%Y-%m-%dT%H:%M:%SZ"), now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _default_time_range_ms() -> tuple[int, int]:
+    """Return (start_ms, end_ms) as epoch milliseconds covering the last 24 hours."""
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(hours=24)
+    return int(start.timestamp() * 1000), int(now.timestamp() * 1000)
 
 
 async def _samsara_request(
@@ -250,86 +265,25 @@ SAMSARA_TOOLS: list[dict] = [
         },
     },
     {
-        "name": "samsara_create_live_share",
-        "description": "Create a new live sharing link — a Samsara-hosted page showing real-time GPS locations on an interactive map. Requires Write Live Sharing Links scope.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Display name for the share link (e.g. 'Fleet Overview').",
-                },
-                "type": {
-                    "type": "string",
-                    "description": "Link type: 'assetsLocation' (track specific vehicles), 'assetsNearLocation' (vehicles near a point), or 'assetsOnRoute' (vehicles on a route).",
-                    "default": "assetsLocation",
-                    "enum": ["assetsLocation", "assetsNearLocation", "assetsOnRoute"],
-                },
-                "vehicle_ids": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of Samsara vehicle IDs to include (for assetsLocation type).",
-                },
-            },
-            "required": ["name"],
-        },
-    },
-    {
-        "name": "samsara_request_dashcam_clip",
-        "description": "Request retrieval of a recorded dashcam video clip for a specific vehicle and time. The clip is not immediately available — use samsara_get_dashcam_clip to check status and get the download URL.",
+        "name": "samsara_get_dashcam_media",
+        "description": "List dashcam media (photos/videos) captured by Samsara cameras, filtered by vehicle and time range. Max 1-day range per request. Returns URLs for playback.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "vehicle_id": {
                     "type": "string",
-                    "description": "Samsara vehicle ID to retrieve dashcam footage for.",
+                    "description": "Samsara vehicle ID to retrieve dashcam media for.",
                 },
                 "start_time": {
                     "type": "string",
-                    "description": "ISO 8601 start time of the clip (e.g. 2025-04-01T14:00:00Z).",
+                    "description": "ISO 8601 start time (e.g. 2025-07-09T00:00:00Z). Max 1-day range from end_time.",
                 },
                 "end_time": {
                     "type": "string",
-                    "description": "ISO 8601 end time of the clip (e.g. 2025-04-01T14:05:00Z). Max 1 minute from start.",
+                    "description": "ISO 8601 end time (e.g. 2025-07-09T23:59:59Z). Max 1-day range from start_time.",
                 },
             },
             "required": ["vehicle_id", "start_time", "end_time"],
-        },
-    },
-    {
-        "name": "samsara_get_dashcam_clip",
-        "description": "Check the status of a dashcam clip retrieval request and get the download/playback URL when ready. Returns status: 'pending', 'processing', 'available', or 'failed'.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "retrieval_id": {
-                    "type": "string",
-                    "description": "The media retrieval ID returned by samsara_request_dashcam_clip.",
-                },
-            },
-            "required": ["retrieval_id"],
-        },
-    },
-    {
-        "name": "samsara_get_uploaded_media",
-        "description": "List dashcam media (photos/videos) that have been uploaded to Samsara, filtered by time range. Returns URLs for playback.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "start_time": {
-                    "type": "string",
-                    "description": "ISO 8601 start time (e.g. 2025-04-01T00:00:00Z).",
-                },
-                "end_time": {
-                    "type": "string",
-                    "description": "ISO 8601 end time (e.g. 2025-04-02T00:00:00Z).",
-                },
-                "vehicle_id": {
-                    "type": "string",
-                    "description": "Optional Samsara vehicle ID to filter by.",
-                },
-            },
-            "required": ["start_time", "end_time"],
         },
     },
 ]
@@ -421,8 +375,12 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
 
         if tool_name == "samsara_get_driver_safety_scores":
             driver_id = tool_input.get("driver_id")
+            start_ms, end_ms = _default_time_range_ms()
+            score_params = {"startMs": start_ms, "endMs": end_ms}
             if driver_id:
-                data = await _samsara_request("GET", f"/fleet/drivers/{driver_id}/safety-score")
+                data = await _samsara_request(
+                    "GET", f"/fleet/drivers/{driver_id}/safety-score", params=score_params
+                )
                 score = data.get("data", {})
                 return {
                     "driver_id": driver_id,
@@ -438,7 +396,7 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
             for d in drivers:
                 try:
                     score_data = await _samsara_request(
-                        "GET", f"/fleet/drivers/{d['id']}/safety-score"
+                        "GET", f"/fleet/drivers/{d['id']}/safety-score", params=score_params
                     )
                     s = score_data.get("data", {})
                     results.append({
@@ -458,8 +416,13 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
 
         if tool_name == "samsara_get_safety_events":
             limit = tool_input.get("limit", 50)
+            default_start, default_end = _default_time_range()
+            start_time = tool_input.get("start_time", default_start)
+            end_time = tool_input.get("end_time", default_end)
             data = await _samsara_request(
-                "GET", "/fleet/safety-events", params={"limit": limit}
+                "GET",
+                "/fleet/safety-events",
+                params={"limit": limit, "startTime": start_time, "endTime": end_time},
             )
             events = data.get("data", [])
             return {
@@ -479,13 +442,13 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
             }
 
         if tool_name == "samsara_get_hos_logs":
-            params: dict[str, Any] = {}
+            default_start, default_end = _default_time_range()
+            params: dict[str, Any] = {
+                "startTime": tool_input.get("start_time", default_start),
+                "endTime": tool_input.get("end_time", default_end),
+            }
             if tool_input.get("driver_id"):
                 params["driverIds"] = tool_input["driver_id"]
-            if tool_input.get("start_time"):
-                params["startTime"] = tool_input["start_time"]
-            if tool_input.get("end_time"):
-                params["endTime"] = tool_input["end_time"]
             data = await _samsara_request("GET", "/fleet/hos/logs", params=params)
             logs = data.get("data", [])
             return {
@@ -497,7 +460,7 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
                         "start_time": l.get("startTime"),
                         "end_time": l.get("endTime"),
                         "vehicle_name": (l.get("vehicle") or {}).get("name", ""),
-                        "location": l.get("codriverName", ""),
+                        "location": l.get("location", {}),
                     }
                     for l in logs
                 ],
@@ -505,7 +468,11 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
             }
 
         if tool_name == "samsara_get_hos_violations":
-            params = {}
+            default_start, default_end = _default_time_range()
+            params = {
+                "startTime": tool_input.get("start_time", default_start),
+                "endTime": tool_input.get("end_time", default_end),
+            }
             if tool_input.get("driver_id"):
                 params["driverIds"] = tool_input["driver_id"]
             data = await _samsara_request("GET", "/fleet/hos/violations", params=params)
@@ -526,11 +493,11 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
             }
 
         if tool_name == "samsara_get_fuel_energy":
-            params = {}
-            if tool_input.get("start_time"):
-                params["startTime"] = tool_input["start_time"]
-            if tool_input.get("end_time"):
-                params["endTime"] = tool_input["end_time"]
+            default_start, default_end = _default_time_range()
+            params = {
+                "startTime": tool_input.get("start_time", default_start),
+                "endTime": tool_input.get("end_time", default_end),
+            }
             data = await _samsara_request("GET", "/fleet/vehicles/fuel-energy", params=params)
             vehicles = data.get("data", [])
             return {
@@ -548,13 +515,13 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
             }
 
         if tool_name == "samsara_get_trips":
-            params: dict[str, Any] = {}
+            default_start, default_end = _default_time_range()
+            params: dict[str, Any] = {
+                "startTime": tool_input.get("start_time", default_start),
+                "endTime": tool_input.get("end_time", default_end),
+            }
             if tool_input.get("vehicle_id"):
                 params["vehicleId"] = tool_input["vehicle_id"]
-            if tool_input.get("start_time"):
-                params["startTime"] = tool_input["start_time"]
-            if tool_input.get("end_time"):
-                params["endTime"] = tool_input["end_time"]
             data = await _samsara_request("GET", "/fleet/trips", params=params)
             trips = data.get("data", [])
             return {
@@ -575,11 +542,11 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
             }
 
         if tool_name == "samsara_get_idle_history":
-            params = {}
-            if tool_input.get("start_time"):
-                params["startTime"] = tool_input["start_time"]
-            if tool_input.get("end_time"):
-                params["endTime"] = tool_input["end_time"]
+            default_start, default_end = _default_time_range()
+            params = {
+                "startTime": tool_input.get("start_time", default_start),
+                "endTime": tool_input.get("end_time", default_end),
+            }
             data = await _samsara_request("GET", "/fleet/vehicles/idle-history", params=params)
             vehicles = data.get("data", [])
             return {
@@ -642,114 +609,42 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
                 }
             return result
 
-        if tool_name == "samsara_create_live_share":
-            name = tool_input.get("name", "Fleet Share")
-            link_type = tool_input.get("type", "assetsLocation")
-            body: dict[str, Any] = {"name": name, "type": link_type}
-            vehicle_ids = tool_input.get("vehicle_ids")
-            if vehicle_ids and link_type == "assetsLocation":
-                body["assetIds"] = [{"id": vid} for vid in vehicle_ids]
-            data = await _samsara_request("POST", "/live-shares", json_body=body)
-            share = data.get("data", data)
-            url = share.get("url", "")
-            result = {
-                "id": share.get("id"),
-                "name": share.get("name", ""),
-                "type": share.get("type", ""),
-                "url": url,
-                "expires_at": share.get("expiresAt"),
-                "message": "Live sharing link created successfully. Open the URL to see real-time GPS tracking on an interactive map.",
-            }
-            if url:
-                result["_embed"] = {
-                    "type": "iframe",
-                    "url": url,
-                    "title": f"Live Tracking: {name}",
-                }
-            return result
-
         # ── Dashcam Media Retrieval ────────────────────────────────
 
-        if tool_name == "samsara_request_dashcam_clip":
-            vehicle_id = tool_input["vehicle_id"]
-            start_time = tool_input["start_time"]
-            end_time = tool_input["end_time"]
-            body = {
-                "vehicleId": vehicle_id,
-                "startTime": start_time,
-                "endTime": end_time,
-            }
-            data = await _samsara_request("POST", "/fleet/media-retrieval", json_body=body)
-            retrieval = data.get("data", data)
-            return {
-                "retrieval_id": retrieval.get("id"),
-                "status": retrieval.get("status", "pending"),
-                "vehicle_id": vehicle_id,
-                "start_time": start_time,
-                "end_time": end_time,
-                "message": "Dashcam clip retrieval requested. Use samsara_get_dashcam_clip with the retrieval_id to check when the video is ready.",
-            }
-
-        if tool_name == "samsara_get_dashcam_clip":
-            retrieval_id = tool_input["retrieval_id"]
-            data = await _samsara_request("GET", f"/fleet/media-retrieval/{retrieval_id}")
-            retrieval = data.get("data", data)
-            status = retrieval.get("status", "unknown")
-            result: dict[str, Any] = {
-                "retrieval_id": retrieval_id,
-                "status": status,
-            }
-            if status == "available":
-                urls = retrieval.get("urls", [])
-                if urls:
-                    video_url = urls[0].get("url", "")
-                    result["video_url"] = video_url
-                    result["urls"] = urls
-                    if video_url:
-                        result["_embed"] = {
-                            "type": "video",
-                            "url": video_url,
-                            "title": f"Dashcam Clip — {retrieval_id[:8]}",
-                        }
-                result["message"] = "Dashcam clip is ready for playback."
-            elif status in ("pending", "processing"):
-                result["message"] = f"Clip is still {status}. Check again in a few seconds."
-            else:
-                result["message"] = f"Clip retrieval status: {status}"
-            return result
-
-        if tool_name == "samsara_get_uploaded_media":
+        if tool_name == "samsara_get_dashcam_media":
             params: dict[str, Any] = {
+                "vehicleIds": tool_input["vehicle_id"],
                 "startTime": tool_input["start_time"],
                 "endTime": tool_input["end_time"],
             }
-            if tool_input.get("vehicle_id"):
-                params["vehicleId"] = tool_input["vehicle_id"]
-            data = await _samsara_request("GET", "/fleet/uploaded-media", params=params)
-            media_items = data.get("data", [])
+            data = await _samsara_request("GET", "/cameras/media", params=params)
+            media_items = (data.get("data") or {}).get("media") or []
             results = []
             embeds = []
             for m in media_items:
                 url = m.get("url", "")
                 media_type = m.get("mediaType", "")
-                item = {
+                item: dict[str, Any] = {
                     "id": m.get("id"),
                     "type": media_type,
                     "url": url,
-                    "time": m.get("capturedAt") or m.get("time"),
+                    "time": m.get("capturedAtTime") or m.get("time"),
+                    "camera": m.get("cameraName", ""),
                     "vehicle_name": (m.get("vehicle") or {}).get("name", ""),
                     "driver_name": (m.get("driver") or {}).get("name", ""),
                 }
                 results.append(item)
-                if url and media_type in ("video", "video/mp4"):
+                if url and "video" in media_type:
                     embeds.append({
                         "type": "video",
                         "url": url,
                         "title": f"Dashcam — {item['vehicle_name'] or 'Unknown'} at {item['time'] or 'N/A'}",
                     })
             result_dict: dict[str, Any] = {"results": results, "total": len(results)}
+            if not results:
+                result_dict["message"] = "No dashcam media found for this vehicle in the given time range. The vehicle may not have a camera installed, or no media was captured during this period."
             if embeds:
-                result_dict["_embeds"] = embeds[:5]  # Limit to 5 videos
+                result_dict["_embeds"] = embeds[:5]
             return result_dict
 
         return {"error": f"Unknown Samsara tool: {tool_name}"}

@@ -45,10 +45,10 @@ export const api = {
     apiFetch<void>("/api/v1/auth/logout", { method: "POST" }),
 
   // Chat
-  sendMessage: (message: string, conversation_id?: string, signal?: AbortSignal) =>
+  sendMessage: (message: string, conversation_id?: string, signal?: AbortSignal, attachments?: { file_id: string; filename: string }[]) =>
     apiFetch<{ conversation_id: string; message: string; tool_calls?: Record<string, unknown>[] }>(
       "/api/v1/chat",
-      { method: "POST", body: JSON.stringify({ message, conversation_id }) },
+      { method: "POST", body: JSON.stringify({ message, conversation_id, attachments: attachments?.length ? attachments : undefined }) },
       signal
     ),
 
@@ -157,6 +157,23 @@ export const api = {
     } finally {
       reader.releaseLock();
     }
+  },
+
+  // Upload
+  uploadFile: async (file: File): Promise<{ file_id: string; filename: string; size: number; content_type: string }> => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${API_BASE}/api/v1/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Upload error: ${res.status}`);
+    }
+    return res.json();
   },
 
   // Conversations

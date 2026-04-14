@@ -18,6 +18,7 @@ from app.departments.logistics import prompts as logistics_prompts
 from app.departments.common.email_tools import EMAIL_TOOLS, is_email_tool  # noqa: F401 — re-exported
 from app.departments.common.slack_tools import SLACK_TOOLS, is_slack_tool  # noqa: F401 — re-exported
 from app.departments.common.quickbooks_tools import QUICKBOOKS_TOOLS, is_quickbooks_tool  # noqa: F401 — re-exported
+from app.departments.common.weather_tools import WEATHER_TOOLS, is_weather_tool, execute_weather_tool
 
 _REGISTRY: dict[str, dict] = {
     "sales": {"tools": sales_tools.TOOLS, "prompt": sales_prompts.SYSTEM_PROMPT, "execute": sales_tools.execute_tool},
@@ -34,15 +35,15 @@ def get_tools(department: str) -> list[dict]:
     entry = _REGISTRY.get(department)
     if entry is None:
         raise KeyError(f"Unknown department: {department}")
-    return entry["tools"] + EMAIL_TOOLS
+    return entry["tools"] + EMAIL_TOOLS + WEATHER_TOOLS
 
 
 async def get_tools_with_slack(department: str, db: AsyncSession | None = None) -> list[dict]:
-    """Return department tools + email tools + slack tools + quickbooks tools (only if connected)."""
+    """Return department tools + email tools + weather tools + slack tools + quickbooks tools (only if connected)."""
     entry = _REGISTRY.get(department)
     if entry is None:
         raise KeyError(f"Unknown department: {department}")
-    tools = entry["tools"] + EMAIL_TOOLS
+    tools = entry["tools"] + EMAIL_TOOLS + WEATHER_TOOLS
     if db is not None:
         from app.models.slack_config import DepartmentSlackConfig
         result = await db.execute(
@@ -74,6 +75,8 @@ def get_prompt(department: str) -> str:
 
 
 async def execute_tool(department: str, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    if is_weather_tool(tool_name):
+        return await execute_weather_tool(tool_name, tool_input)
     entry = _REGISTRY.get(department)
     if entry is None:
         return {"error": f"Unknown department: {department}"}

@@ -10,10 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.agents.orchestrator import get_orchestrator
+from app.api.upload import read_upload_as_text
 from app.db.database import get_db
+from app.config import get_settings
 from app.middleware.auth_middleware import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
 from app.services.usage_service import record_usage
+
+_settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +27,7 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
+    attachments: list[dict] | None = None  # [{file_id, filename}]
 
 
 class ChatResponse(BaseModel):
@@ -68,8 +73,21 @@ async def send_message(
     history_messages = history_result.scalars().all()
     conversation_history = [{"role": m.role, "content": m.content} for m in history_messages]
 
+    # Build enriched message with attachment content
+    enriched_message = body.message
+    if body.attachments:
+        attachment_texts = []
+        for att in body.attachments:
+            file_id = att.get("file_id", "")
+            filename = att.get("filename", "unknown")
+            content = read_upload_as_text(file_id)
+            if content:
+                attachment_texts.append(f"[Attached file: {filename}]\n{content}")
+        if attachment_texts:
+            enriched_message = "\n\n".join(attachment_texts) + "\n\n" + body.message
+
     # Save user message
-    user_msg = Message(conversation_id=conversation.id, role="user", content=body.message)
+    user_msg = Message(conversation_id=conversation.id, role="user", content=enriched_message)
     db.add(user_msg)
     await db.flush()
 
@@ -77,7 +95,7 @@ async def send_message(
     try:
         agent_response = await get_orchestrator().process_query(
             department=current_user.department,
-            user_message=body.message,
+            user_message=enriched_message,
             conversation_history=conversation_history,
             db=db,
         )
@@ -238,7 +256,7 @@ async def stream_chat(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 tool_calls_count=len(tool_calls),
-                model="claude-sonnet-4-5-20250929",
+                model=_settings.claude_model,
             )
 
         yield {
