@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Use relative URLs so Next.js can proxy API calls to the backend
+// This allows a single ngrok tunnel for the frontend to serve everything
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -102,9 +104,15 @@ export const api = {
     // Also handle legacy \n\n just in case
     const SSE_SEP = /\r?\n\r?\n/;
 
+    // Timeout helper: if no data arrives for 90s, treat as a hang
+    const STREAM_TIMEOUT_MS = 90_000;
+
     try {
       while (true) {
-        const { done, value } = await reader.read();
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Stream timed out — no data received for 90 seconds")), STREAM_TIMEOUT_MS)
+        );
+        const { done, value } = await Promise.race([reader.read(), timeoutPromise]);
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -117,40 +125,59 @@ export const api = {
         for (const part of parts) {
           if (!part.trim()) continue;
 
-          let eventType = "message";
-          let dataStr = "";
+          // Proxies (ngrok, Next.js rewrites) may merge multiple SSE events
+          // into one chunk. Split into individual event blocks: each block
+          // starts with "event:" or a standalone "data:" line.
+          const events: { eventType: string; dataStr: string }[] = [];
+          let currentEvent = "message";
+          let currentData = "";
 
-          // Split lines — handle \r\n and \n
           for (const rawLine of part.split(/\r?\n/)) {
-            const line = rawLine.trimEnd(); // remove trailing \r if any
+            const line = rawLine.trimEnd();
             if (line.startsWith("event:")) {
-              eventType = line.slice(6).trim();
+              // Flush previous event if it had data
+              if (currentData) {
+                events.push({ eventType: currentEvent, dataStr: currentData });
+                currentData = "";
+              }
+              currentEvent = line.slice(6).trim();
             } else if (line.startsWith("data:")) {
-              dataStr = line.slice(5).trim();
+              const newData = line.slice(5).trim();
+              if (currentData) {
+                // Another data line without a new event: means the proxy
+                // merged two events. Flush the previous one as "message".
+                events.push({ eventType: currentEvent, dataStr: currentData });
+                currentEvent = "message";
+              }
+              currentData = newData;
             }
           }
+          if (currentData) {
+            events.push({ eventType: currentEvent, dataStr: currentData });
+          }
 
-          if (!dataStr) continue;
+          for (const { eventType, dataStr } of events) {
+            if (!dataStr) continue;
+            try {
+              const data = JSON.parse(dataStr) as Record<string, unknown>;
 
-          try {
-            const data = JSON.parse(dataStr) as Record<string, unknown>;
-
-            if (eventType === "conv_id") {
-              callbacks.onConversationId?.(data.conversation_id as string);
-            } else if (eventType === "message") {
-              callbacks.onChunk((data.content as string) ?? "");
-            } else if (eventType === "tool_status") {
-              callbacks.onToolStatus((data.tool as string) ?? "");
-            } else if (eventType === "done") {
-              callbacks.onDone({
-                conversation_id: data.conversation_id as string,
-                tool_calls: data.tool_calls as Record<string, unknown>[] | undefined,
-              });
-            } else if (eventType === "error") {
-              callbacks.onError((data.message as string) ?? "Unknown error");
+              if (eventType === "conv_id") {
+                callbacks.onConversationId?.(data.conversation_id as string);
+              } else if (eventType === "message") {
+                callbacks.onChunk((data.content as string) ?? "");
+              } else if (eventType === "tool_status") {
+                callbacks.onToolStatus((data.tool as string) ?? "");
+              } else if (eventType === "done") {
+                callbacks.onDone({
+                  conversation_id: data.conversation_id as string,
+                  tool_calls: data.tool_calls as Record<string, unknown>[] | undefined,
+                });
+              } else if (eventType === "error") {
+                callbacks.onError((data.message as string) ?? "Unknown error");
+              }
+            } catch {
+              // ignore malformed JSON in individual events
             }
-          } catch {
-            // ignore malformed JSON in individual events
           }
         }
       }

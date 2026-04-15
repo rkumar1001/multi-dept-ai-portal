@@ -49,7 +49,7 @@ export default function LoginPage() {
                 <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="currentColor" />
               </svg>
             </div>
-            <span className="text-white text-xl font-bold tracking-tight">VRTek Consulting</span>
+            <span className="text-white text-xl font-bold tracking-tight">TechYard Systems</span>
           </Link>
 
           {/* Testimonial / Feature showcase */}
@@ -60,7 +60,7 @@ export default function LoginPage() {
           </div>
 
           <p className="text-white/30 text-sm">
-            &copy; {new Date().getFullYear()} VRTek Consulting
+            &copy; {new Date().getFullYear()} TechYard Systems
           </p>
         </div>
       </div>
@@ -76,7 +76,7 @@ export default function LoginPage() {
                   <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="currentColor" />
                 </svg>
               </div>
-              <span className="text-xl font-bold text-brand-navy">VRTek Consulting</span>
+              <span className="text-xl font-bold text-brand-navy">TechYard Systems</span>
             </Link>
           </div>
 

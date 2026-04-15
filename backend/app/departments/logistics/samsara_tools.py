@@ -5,12 +5,15 @@ HOS compliance, fuel, trips, idling, equipment, live sharing links,
 and dashcam media retrieval.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # ── Samsara API helper ─────────────────────────────────────────────────────
 
@@ -43,19 +46,27 @@ async def _samsara_request(
     Raises on HTTP or network errors.
     """
     settings = get_settings()
+    if not settings.samsara_api_key:
+        logger.error("Samsara API key is not configured")
+        raise ValueError("Samsara API key is not configured. Check your .env file.")
     headers = {
         "Authorization": f"Bearer {settings.samsara_api_key}",
         "Accept": "application/json",
     }
+    url = f"{_BASE_URL}{path}"
+    logger.info("Samsara API request: %s %s params=%s", method, url, params)
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.request(
             method,
-            f"{_BASE_URL}{path}",
+            url,
             headers=headers,
             params=params,
             json=json_body,
         )
+        if resp.status_code >= 400:
+            logger.error("Samsara API error: %s %s → %d: %s", method, path, resp.status_code, resp.text[:300])
         resp.raise_for_status()
+        logger.info("Samsara API response: %s %s → %d", method, path, resp.status_code)
         return resp.json()
 
 
@@ -590,7 +601,7 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
             results = []
             embed_url = None
             for s in shares:
-                url = s.get("url", "")
+                url = s.get("liveSharingUrl", "") or s.get("url", "")
                 results.append({
                     "id": s.get("id"),
                     "name": s.get("name", ""),
@@ -649,9 +660,18 @@ async def execute_samsara_tool(tool_name: str, tool_input: dict[str, Any]) -> di
 
         return {"error": f"Unknown Samsara tool: {tool_name}"}
 
+    except httpx.TimeoutException as exc:
+        logger.error("Samsara tool '%s' timed out: %s", tool_name, exc)
+        return {"error": f"Samsara API timed out for '{tool_name}'. The service may be slow or unavailable."}
     except httpx.HTTPStatusError as exc:
+        logger.error("Samsara tool '%s' HTTP error %d: %s", tool_name, exc.response.status_code, exc.response.text[:300])
         return {"error": f"Samsara API error {exc.response.status_code}: {exc.response.text[:300]}"}
     except httpx.HTTPError as exc:
+        logger.error("Samsara tool '%s' request error: %s", tool_name, exc)
         return {"error": f"Samsara API request error: {exc}"}
+    except ValueError as exc:
+        logger.error("Samsara tool '%s' config error: %s", tool_name, exc)
+        return {"error": str(exc)}
     except Exception as exc:
+        logger.error("Samsara tool '%s' unexpected error: %s: %s", tool_name, type(exc).__name__, exc)
         return {"error": f"Samsara tool error: {exc}"}

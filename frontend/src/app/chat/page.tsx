@@ -810,6 +810,16 @@ function ChatPageContent() {
   const [attachments, setAttachments] = useState<{ file_id: string; filename: string; size: number }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Abort any in-flight stream when the component unmounts (e.g. navigation)
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -1021,12 +1031,20 @@ function ChatPageContent() {
                 finalToolCalls = data.tool_calls;
               },
               onError: (error) => {
-                // Server-side error event — treat as terminal, no retry
-                setMessages((prev) => [
-                  ...prev,
-                  { role: "assistant", content: `Sorry, I encountered an error: ${error}` },
-                ]);
-                streamingContentRef.current = "";
+                // Server-side error event — treat as terminal, no retry.
+                // If text was already streaming, append the error to it so
+                // we don't create a duplicate assistant message.
+                const partial = streamingContentRef.current;
+                if (partial) {
+                  streamingContentRef.current = partial + `\n\n---\n**Error:** ${error}`;
+                  setStreamingContent(streamingContentRef.current);
+                } else {
+                  setMessages((prev) => [
+                    ...prev,
+                    { role: "assistant", content: `Sorry, I encountered an error: ${error}` },
+                  ]);
+                  streamingContentRef.current = "";
+                }
               },
             },
             controller.signal
@@ -1151,7 +1169,7 @@ function ChatPageContent() {
                 </svg>
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-brand-navy truncate">VRTek AI</p>
+                <p className="text-sm font-semibold text-brand-navy truncate">TechYard AI</p>
                 <p className="text-xs text-gray-400 truncate">{fullName}</p>
               </div>
             </div>
@@ -1449,66 +1467,62 @@ function ChatPageContent() {
                     }`}
                   >
                     {msg.role === "assistant" ? (
-                      msg.tool_calls && msg.tool_calls.length > 0 ? (
-                        <DashboardMessage content={msg.content} toolCalls={msg.tool_calls} department={department} onFollowUp={handleSend} />
-                      ) : (
-                        <div className="rounded-2xl rounded-tl-md bg-white border border-gray-200/60 shadow-sm px-5 py-4 overflow-hidden">
-                          <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-p:leading-relaxed prose-headings:my-2 prose-headings:text-brand-navy prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-strong:text-brand-navy prose-table:my-0 prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-xl prose-code:text-brand-teal prose-code:bg-brand-teal/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-a:text-brand-teal prose-a:no-underline hover:prose-a:underline">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                table: ({ children, ...props }) => (
-                                  <div className="my-3 overflow-x-auto rounded-xl border border-gray-200/80 shadow-sm">
-                                    <table className="w-full text-xs" {...props}>{children}</table>
-                                  </div>
-                                ),
-                                thead: ({ children, ...props }) => (
-                                  <thead className="bg-gradient-to-r from-brand-navy to-brand-teal text-white" {...props}>{children}</thead>
-                                ),
-                                th: ({ children, ...props }) => (
-                                  <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap" {...props}>{children}</th>
-                                ),
-                                td: ({ children, ...props }) => (
-                                  <td className="px-3 py-2 text-gray-700 whitespace-nowrap border-b border-gray-100" {...props}>{children}</td>
-                                ),
-                                tr: ({ children, ...props }) => (
-                                  <tr className="hover:bg-brand-teal/[0.03] transition-colors" {...props}>{children}</tr>
-                                ),
-                                h1: ({ children, ...props }) => (
-                                  <h1 className="text-lg font-bold text-brand-navy flex items-center gap-2" {...props}>
-                                    {children}
-                                  </h1>
-                                ),
-                                h2: ({ children, ...props }) => (
-                                  <h2 className="text-base font-bold text-brand-navy flex items-center gap-2 mt-4 mb-2" {...props}>
-                                    {children}
-                                  </h2>
-                                ),
-                                h3: ({ children, ...props }) => (
-                                  <h3 className="text-sm font-bold text-brand-navy mt-3 mb-1" {...props}>
-                                    {children}
-                                  </h3>
-                                ),
-                                ul: ({ children, ...props }) => (
-                                  <ul className="space-y-1 my-2" {...props}>{children}</ul>
-                                ),
-                                li: ({ children, ...props }) => (
-                                  <li className="text-gray-700 leading-relaxed" {...props}>{children}</li>
-                                ),
-                                blockquote: ({ children, ...props }) => (
-                                  <blockquote className="border-l-3 border-brand-teal bg-brand-teal/5 rounded-r-lg px-4 py-2 my-2 text-gray-600 italic" {...props}>{children}</blockquote>
-                                ),
-                                hr: () => (
-                                  <hr className="my-3 border-gray-200/60" />
-                                ),
-                              }}
-                            >
-                              {msg.content}
-                            </ReactMarkdown>
-                          </div>
-                          <MessageActions content={msg.content} />
+                      <div className="rounded-2xl rounded-tl-md bg-white border border-gray-200/60 shadow-sm px-5 py-4 overflow-hidden">
+                        <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-p:leading-relaxed prose-headings:my-2 prose-headings:text-brand-navy prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-strong:text-brand-navy prose-table:my-0 prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-xl prose-code:text-brand-teal prose-code:bg-brand-teal/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-a:text-brand-teal prose-a:no-underline hover:prose-a:underline">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              table: ({ children, ...props }) => (
+                                <div className="my-3 overflow-x-auto rounded-xl border border-gray-200/80 shadow-sm">
+                                  <table className="w-full text-xs" {...props}>{children}</table>
+                                </div>
+                              ),
+                              thead: ({ children, ...props }) => (
+                                <thead className="bg-gradient-to-r from-brand-navy to-brand-teal text-white" {...props}>{children}</thead>
+                              ),
+                              th: ({ children, ...props }) => (
+                                <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap" {...props}>{children}</th>
+                              ),
+                              td: ({ children, ...props }) => (
+                                <td className="px-3 py-2 text-gray-700 whitespace-nowrap border-b border-gray-100" {...props}>{children}</td>
+                              ),
+                              tr: ({ children, ...props }) => (
+                                <tr className="hover:bg-brand-teal/[0.03] transition-colors" {...props}>{children}</tr>
+                              ),
+                              h1: ({ children, ...props }) => (
+                                <h1 className="text-lg font-bold text-brand-navy flex items-center gap-2" {...props}>
+                                  {children}
+                                </h1>
+                              ),
+                              h2: ({ children, ...props }) => (
+                                <h2 className="text-base font-bold text-brand-navy flex items-center gap-2 mt-4 mb-2" {...props}>
+                                  {children}
+                                </h2>
+                              ),
+                              h3: ({ children, ...props }) => (
+                                <h3 className="text-sm font-bold text-brand-navy mt-3 mb-1" {...props}>
+                                  {children}
+                                </h3>
+                              ),
+                              ul: ({ children, ...props }) => (
+                                <ul className="space-y-1 my-2" {...props}>{children}</ul>
+                              ),
+                              li: ({ children, ...props }) => (
+                                <li className="text-gray-700 leading-relaxed" {...props}>{children}</li>
+                              ),
+                              blockquote: ({ children, ...props }) => (
+                                <blockquote className="border-l-3 border-brand-teal bg-brand-teal/5 rounded-r-lg px-4 py-2 my-2 text-gray-600 italic" {...props}>{children}</blockquote>
+                              ),
+                              hr: () => (
+                                <hr className="my-3 border-gray-200/60" />
+                              ),
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
                         </div>
-                      )
+                        <MessageActions content={msg.content} />
+                      </div>
                     ) : (
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     )}
@@ -1718,7 +1732,7 @@ function ChatPageContent() {
               )}
             </div>
             <p className="text-center text-[11px] text-gray-400 mt-2">
-              VRTek AI can make mistakes. Verify important information.
+              TechYard AI can make mistakes. Verify important information.
             </p>
           </div>
         </div>
