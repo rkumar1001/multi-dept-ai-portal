@@ -62,6 +62,11 @@ function AdminPageContent() {
   const [qbStatus, setQbStatus] = useState<Record<string, { realm_id: string; company_name: string | null; is_active: boolean }>>({});
   const [qbConnecting, setQbConnecting] = useState<string | null>(null);
   const [slackConnecting, setSlackConnecting] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    email: false, slack: false, quickbooks: false,
+  });
+  const toggleSection = (key: string) =>
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -80,7 +85,6 @@ function AdminPageContent() {
     const qbConnected = searchParams.get("quickbooks_connected");
     const qbError = searchParams.get("quickbooks_error");
     const slackError = searchParams.get("slack_error");
-
     if (emailConnected) {
       loadEmailStatus();
       window.history.replaceState({}, "", "/admin");
@@ -500,53 +504,71 @@ function AdminPageContent() {
             </div>
 
             {/* Email Integration */}
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Email Integration</h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
-              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
-                const cfg = DEPARTMENT_CONFIG[dept];
-                const email = emailStatus[dept];
-                return (
-                  <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">{cfg?.icon}</span>
-                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
-                    </div>
-                    {email ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs font-medium text-green-700 capitalize">{email.provider}</span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate mb-3" title={email.email_address}>{email.email_address}</p>
-                        <button
-                          onClick={() => handleDisconnectEmail(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleConnectEmail(dept, "gmail")}
-                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            Gmail
-                          </button>
-                          <button
-                            onClick={() => handleConnectEmail(dept, "outlook")}
-                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            Outlook
-                          </button>
-                        </div>
-                      </div>
-                    )}
+            <div className="mb-6">
+              <button
+                onClick={() => toggleSection("email")}
+                className="w-full flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm border border-gray-200 hover:bg-gray-50 transition mb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">✉️</span>
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">Email Integration</h2>
+                    <p className="text-xs text-gray-400">Gmail &amp; Outlook — connect per department</p>
                   </div>
-                );
-              })}
+                </div>
+                <span className={`text-gray-400 text-lg transition-transform duration-200 ${openSections.email ? "rotate-180" : ""}`}>⌄</span>
+              </button>
+              {openSections.email && (
+                <div className="pt-3">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-2">
+                    {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                      const cfg = DEPARTMENT_CONFIG[dept];
+                      const email = emailStatus[dept];
+                      return (
+                        <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">{cfg?.icon}</span>
+                            <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                          </div>
+                          {email ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <span className="text-xs font-medium text-green-700 capitalize">{email.provider}</span>
+                              </div>
+                              <p className="text-xs text-gray-500 truncate mb-3" title={email.email_address}>{email.email_address}</p>
+                              <button
+                                onClick={() => handleDisconnectEmail(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleConnectEmail(dept, "gmail")}
+                                  className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                                >
+                                  Gmail
+                                </button>
+                                <button
+                                  onClick={() => handleConnectEmail(dept, "outlook")}
+                                  className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                                >
+                                  Outlook
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Department KPI Insights */}
@@ -585,111 +607,147 @@ function AdminPageContent() {
             )}
 
             {/* Slack Integration */}
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Slack Integration</h2>
-            <p className="text-xs text-gray-400 mb-4 -mt-2">
-              A Slack authorization window will open. Complete sign-in there — you will stay logged in here.
-            </p>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
-              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
-                const cfg = DEPARTMENT_CONFIG[dept];
-                const slack = slackStatus[dept];
-                const connecting = slackConnecting === dept;
-                return (
-                  <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-purple-300 bg-purple-50/30" : "border-gray-200"}`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">{cfg?.icon}</span>
-                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
-                    </div>
-                    {slack ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs font-medium text-green-700">Connected</span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate mb-3" title={slack.team_name}>{slack.team_name}</p>
-                        <button
-                          onClick={() => handleDisconnectSlack(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : connecting ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                          <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
-                        </div>
-                        <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
-                        <button
-                          onClick={() => handleConnectSlack(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-[#4A154B] text-[#4A154B] hover:bg-[#4A154B] hover:text-white transition"
-                        >
-                          Connect Slack
-                        </button>
-                      </div>
-                    )}
+            <div className="mb-6">
+              <button
+                onClick={() => toggleSection("slack")}
+                className="w-full flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm border border-gray-200 hover:bg-gray-50 transition mb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">💬</span>
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">Slack Integration</h2>
+                    <p className="text-xs text-gray-400">Connect Slack workspaces per department</p>
                   </div>
-                );
-              })}
+                </div>
+                <span className={`text-gray-400 text-lg transition-transform duration-200 ${openSections.slack ? "rotate-180" : ""}`}>⌄</span>
+              </button>
+              {openSections.slack && (
+                <div className="pt-3">
+                  <p className="text-xs text-gray-400 mb-3">
+                    A Slack authorization window will open. Complete sign-in there — you will stay logged in here.
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-2">
+                    {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                      const cfg = DEPARTMENT_CONFIG[dept];
+                      const slack = slackStatus[dept];
+                      const connecting = slackConnecting === dept;
+                      return (
+                        <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-purple-300 bg-purple-50/30" : "border-gray-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">{cfg?.icon}</span>
+                            <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                          </div>
+                          {slack ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <span className="text-xs font-medium text-green-700">Connected</span>
+                              </div>
+                              <p className="text-xs text-gray-500 truncate mb-3" title={slack.team_name}>{slack.team_name}</p>
+                              <button
+                                onClick={() => handleDisconnectSlack(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : connecting ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
+                              </div>
+                              <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                              <button
+                                onClick={() => handleConnectSlack(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-[#4A154B] text-[#4A154B] hover:bg-[#4A154B] hover:text-white transition"
+                              >
+                                Connect Slack
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* QuickBooks Integration */}
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">QuickBooks Integration</h2>
-            <p className="text-xs text-gray-400 mb-4 -mt-2">
-              A QuickBooks authorization window will open. Complete sign-in there — you will stay logged in here.
-            </p>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
-              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
-                const cfg = DEPARTMENT_CONFIG[dept];
-                const qb = qbStatus[dept];
-                const connecting = qbConnecting === dept;
-                return (
-                  <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-green-300 bg-green-50/30" : "border-gray-200"}`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">{cfg?.icon}</span>
-                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
-                    </div>
-                    {qb ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs font-medium text-green-700">Connected</span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate mb-3" title={qb.company_name || qb.realm_id}>{qb.company_name || `Realm: ${qb.realm_id}`}</p>
-                        <button
-                          onClick={() => handleDisconnectQuickBooks(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : connecting ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                          <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
-                        </div>
-                        <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
-                        <button
-                          onClick={() => handleConnectQuickBooks(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-[#2CA01C] text-[#2CA01C] hover:bg-[#2CA01C] hover:text-white transition"
-                        >
-                          Connect QuickBooks
-                        </button>
-                      </div>
-                    )}
+            <div className="mb-6">
+              <button
+                onClick={() => toggleSection("quickbooks")}
+                className="w-full flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm border border-gray-200 hover:bg-gray-50 transition mb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">📊</span>
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">QuickBooks Integration</h2>
+                    <p className="text-xs text-gray-400">Accounting &amp; invoicing per department</p>
                   </div>
-                );
-              })}
+                </div>
+                <span className={`text-gray-400 text-lg transition-transform duration-200 ${openSections.quickbooks ? "rotate-180" : ""}`}>⌄</span>
+              </button>
+              {openSections.quickbooks && (
+                <div className="pt-3">
+                  <p className="text-xs text-gray-400 mb-3">
+                    A QuickBooks authorization window will open. Complete sign-in there — you will stay logged in here.
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-2">
+                    {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                      const cfg = DEPARTMENT_CONFIG[dept];
+                      const qb = qbStatus[dept];
+                      const connecting = qbConnecting === dept;
+                      return (
+                        <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-green-300 bg-green-50/30" : "border-gray-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">{cfg?.icon}</span>
+                            <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                          </div>
+                          {qb ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <span className="text-xs font-medium text-green-700">Connected</span>
+                              </div>
+                              <p className="text-xs text-gray-500 truncate mb-3" title={qb.company_name || qb.realm_id}>{qb.company_name || `Realm: ${qb.realm_id}`}</p>
+                              <button
+                                onClick={() => handleDisconnectQuickBooks(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : connecting ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
+                              </div>
+                              <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                              <button
+                                onClick={() => handleConnectQuickBooks(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-[#2CA01C] text-[#2CA01C] hover:bg-[#2CA01C] hover:text-white transition"
+                              >
+                                Connect QuickBooks
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Department Detail Cards */}

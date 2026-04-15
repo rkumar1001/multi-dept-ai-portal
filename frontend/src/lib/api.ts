@@ -299,4 +299,5 @@ export const api = {
       `/api/v1/quickbooks/disconnect/${department}`,
       { method: "DELETE" }
     ),
+
 };

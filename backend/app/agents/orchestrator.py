@@ -9,11 +9,12 @@ from typing import Any, AsyncIterator
 import anthropic
 import httpx
 
-from app.agents.registry import execute_tool, get_prompt, get_tools, get_tools_with_slack, is_email_tool, is_slack_tool, is_quickbooks_tool
+from app.agents.registry import execute_tool, get_prompt, get_tools, get_tools_with_slack, is_email_tool, is_slack_tool, is_quickbooks_tool, is_ghl_tool
 from app.config import get_settings
 from app.departments.common.email_tools import execute_email_tool
 from app.departments.common.slack_tools import execute_slack_tool
 from app.departments.common.quickbooks_tools import execute_quickbooks_tool
+from app.departments.common.ghl_tools import execute_ghl_tool
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -198,6 +199,10 @@ class AgentOrchestrator:
                         elif is_quickbooks_tool(block.name) and db is not None:
                             tool_result = await _execute_with_timeout(
                                 execute_quickbooks_tool(block.name, block.input, department, db), block.name)
+                        # GoHighLevel tools
+                        elif is_ghl_tool(block.name) and db is not None:
+                            tool_result = await _execute_with_timeout(
+                                execute_ghl_tool(block.name, block.input, department, db), block.name)
                         else:
                             tool_result = await _execute_with_timeout(
                                 execute_tool(department, block.name, block.input), block.name)
@@ -340,6 +345,10 @@ class AgentOrchestrator:
                         elif is_quickbooks_tool(block.name) and db is not None:
                             tool_result = await _execute_with_timeout(
                                 execute_quickbooks_tool(block.name, block.input, department, db), block.name)
+                        # GoHighLevel tools
+                        elif is_ghl_tool(block.name) and db is not None:
+                            tool_result = await _execute_with_timeout(
+                                execute_ghl_tool(block.name, block.input, department, db), block.name)
                         else:
                             tool_result = await _execute_with_timeout(
                                 execute_tool(department, block.name, block.input), block.name)
@@ -352,7 +361,7 @@ class AgentOrchestrator:
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": json.dumps(tool_result),
+                            "content": _truncate_tool_result(tool_result),
                         })
 
                 messages.append({"role": "user", "content": tool_results})

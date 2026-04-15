@@ -1,7 +1,11 @@
+# This file defines the application settings using Pydantic's BaseSettings.
+# It loads configuration from environment variables and a .env file, and provides a cached function to access the settings throughout the app.
 from pathlib import Path
 from pydantic_settings import BaseSettings
+# LRU cache is used to ensure that the settings are loaded only once and then cached for subsequent access, improving performance.
 from functools import lru_cache
 
+# Define the path to the .env file, which is located in the parent directory of this config file.
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
@@ -13,6 +17,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:3002"
     frontend_url: str = "http://localhost:3000"
 
+# For simplicity, we're using SQLite for development. 
     database_url: str = f"sqlite+aiosqlite:///{Path(__file__).resolve().parent.parent / 'ai_portal.db'}"
 
     anthropic_api_key: str = ""
@@ -54,9 +59,15 @@ class Settings(BaseSettings):
     quickbooks_redirect_uri: str = "http://localhost:8000/api/v1/quickbooks/callback"
     quickbooks_environment: str = "sandbox"
 
+    # GoHighLevel OAuth
+    ghl_client_id: str = ""
+    ghl_client_secret: str = ""
+    ghl_redirect_uri: str = "http://localhost:8000/api/v1/crm/callback"
+    ghl_environment: str = "sandbox"  # "sandbox" | "production"
+
     model_config = {"env_file": str(_ENV_FILE), "extra": "ignore"}
 
-
+#it stores once load all data and 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
