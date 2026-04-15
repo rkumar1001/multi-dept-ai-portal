@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VRTek Consulting — AI Integration Portal",
-  description: "Enterprise AI integrations for logistics, restaurant operations, and more. Powered by VRTek Consulting.",
+  title: "TechYard Systems — AI Integration Portal",
+  description: "Enterprise AI integrations for logistics, restaurant operations, and more. Powered by TechYard Systems.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

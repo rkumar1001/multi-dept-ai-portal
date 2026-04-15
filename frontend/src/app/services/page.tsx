@@ -143,7 +143,7 @@ export default function ServicesPage() {
                 <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="currentColor" />
               </svg>
             </div>
-            <span className="text-lg font-bold text-brand-navy">VRTek Consulting</span>
+            <span className="text-lg font-bold text-brand-navy">TechYard Systems</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link
@@ -242,10 +242,10 @@ export default function ServicesPage() {
                 <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="currentColor" />
               </svg>
             </div>
-            <span className="text-sm font-semibold text-brand-navy">VRTek Consulting</span>
+            <span className="text-sm font-semibold text-brand-navy">TechYard Systems</span>
           </Link>
           <p className="text-sm text-gray-400">
-            &copy; {new Date().getFullYear()} VRTek Consulting. All rights reserved.
+            &copy; {new Date().getFullYear()} TechYard Systems. All rights reserved.
           </p>
         </div>
       </footer>

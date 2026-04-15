@@ -11,7 +11,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.agents.orchestrator import get_orchestrator
 from app.api.upload import read_upload_as_text
-from app.db.database import get_db
+from app.db.database import async_session, get_db
 from app.config import get_settings
 from app.middleware.auth_middleware import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
@@ -183,12 +183,15 @@ async def stream_chat(
     history_messages = history_result.scalars().all()
     conversation_history = [{"role": m.role, "content": m.content} for m in history_messages]
 
-    # Save user message before streaming begins
+    # Save user message and commit before streaming begins so the DB session
+    # is not held open for the entire duration of the SSE stream.
     user_msg = Message(conversation_id=conversation.id, role="user", content=body.message)
     db.add(user_msg)
-    await db.flush()
+    await db.commit()
 
     conv_id = str(conversation.id)
+    user_id = current_user.id
+    user_department = current_user.department
 
     async def event_generator():
         full_content: list[str] = []
@@ -201,32 +204,34 @@ async def stream_chat(
         yield {"event": "conv_id", "data": json.dumps({"conversation_id": conv_id})}
 
         try:
-            async for event in get_orchestrator().stream_query(
-                department=current_user.department,
-                user_message=body.message,
-                conversation_history=conversation_history,
-                db=db,
-            ):
-                if event["type"] == "text":
-                    full_content.append(event["content"])
-                    yield {"event": "message", "data": json.dumps({"content": event["content"]})}
+            # Use a fresh DB session for tool execution during streaming
+            async with async_session() as stream_db:
+                async for event in get_orchestrator().stream_query(
+                    department=user_department,
+                    user_message=body.message,
+                    conversation_history=conversation_history,
+                    db=stream_db,
+                ):
+                    if event["type"] == "text":
+                        full_content.append(event["content"])
+                        yield {"event": "message", "data": json.dumps({"content": event["content"]})}
 
-                elif event["type"] == "tool_status":
-                    yield {"event": "tool_status", "data": json.dumps({"tool": event["name"]})}
+                    elif event["type"] == "tool_status":
+                        yield {"event": "tool_status", "data": json.dumps({"tool": event["name"]})}
 
-                elif event["type"] == "error":
-                    logger.error("Stream query error event: %s", event["message"])
-                    yield {"event": "error", "data": json.dumps({"message": event["message"]})}
-                    yield {
-                        "event": "done",
-                        "data": json.dumps({"status": "error", "conversation_id": conv_id, "tool_calls": []}),
-                    }
-                    return
+                    elif event["type"] == "error":
+                        logger.error("Stream query error event: %s", event["message"])
+                        yield {"event": "error", "data": json.dumps({"message": event["message"]})}
+                        yield {
+                            "event": "done",
+                            "data": json.dumps({"status": "error", "conversation_id": conv_id, "tool_calls": []}),
+                        }
+                        return
 
-                elif event["type"] == "done":
-                    tool_calls = event["tool_calls"]
-                    input_tokens = event["input_tokens"]
-                    output_tokens = event["output_tokens"]
+                    elif event["type"] == "done":
+                        tool_calls = event["tool_calls"]
+                        input_tokens = event["input_tokens"]
+                        output_tokens = event["output_tokens"]
 
         except Exception as exc:
             logger.error("Stream event generator crashed: %s", exc)
@@ -237,27 +242,33 @@ async def stream_chat(
             }
             return
 
-        # Save assistant message to DB after streaming completes
+        # Save assistant message to DB using a fresh session (the request-scoped
+        # session is already closed by the time the generator reaches this point).
         content_text = "".join(full_content)
         if content_text:
-            assistant_msg = Message(
-                conversation_id=conv_id,
-                role="assistant",
-                content=content_text,
-                tool_calls=tool_calls if tool_calls else None,
-                token_count=input_tokens + output_tokens,
-            )
-            db.add(assistant_msg)
+            try:
+                async with async_session() as save_db:
+                    assistant_msg = Message(
+                        conversation_id=conv_id,
+                        role="assistant",
+                        content=content_text,
+                        tool_calls=tool_calls if tool_calls else None,
+                        token_count=input_tokens + output_tokens,
+                    )
+                    save_db.add(assistant_msg)
 
-            await record_usage(
-                db=db,
-                user_id=current_user.id,
-                department=current_user.department,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                tool_calls_count=len(tool_calls),
-                model=_settings.claude_model,
-            )
+                    await record_usage(
+                        db=save_db,
+                        user_id=user_id,
+                        department=user_department,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        tool_calls_count=len(tool_calls),
+                        model=_settings.claude_model,
+                    )
+                    await save_db.commit()
+            except Exception as exc:
+                logger.error("Failed to save assistant message to DB: %s", exc)
 
         yield {
             "event": "done",
@@ -268,4 +279,10 @@ async def stream_chat(
             }),
         }
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        event_generator(),
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # Disable buffering in nginx/ngrok
+        },
+    )

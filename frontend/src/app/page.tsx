@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-/* ── VRTek Logo (inline SVG) ───────────────────────────────────────────────── */
-function VRTekLogo({ className = "h-10" }: { className?: string }) {
+/* ── TechYard Systems Logo (inline SVG) ────────────────────────────────────── */
+function TechYardLogo({ className = "h-10" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 662 172" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} viewBox="0 0 720 172" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="tyGrad" x1="0" y1="0" x2="172" y2="172" gradientUnits="userSpaceOnUse">
           <stop stopColor="#557C93" />
@@ -16,8 +16,8 @@ function VRTekLogo({ className = "h-10" }: { className?: string }) {
       </defs>
       <rect width="172" height="172" rx="40" fill="url(#tyGrad)" />
       <path d="M42 52H130V72H96V132H76V72H42V52Z" fill="white" />
-      <text x="192" y="115" fontFamily="Inter, sans-serif" fontWeight="800" fontSize="72" fill="#08203E">VRTEK</text>
-      <text x="192" y="155" fontFamily="Inter, sans-serif" fontWeight="400" fontSize="36" letterSpacing="12" fill="#557C93">CONSULTING</text>
+      <text x="192" y="105" fontFamily="Inter, sans-serif" fontWeight="800" fontSize="68" fill="#08203E">TECHYARD</text>
+      <text x="192" y="155" fontFamily="Inter, sans-serif" fontWeight="400" fontSize="40" letterSpacing="10" fill="#557C93">SYSTEMS</text>
     </svg>
   );
 }
@@ -79,7 +79,7 @@ export default function Home() {
       {/* ── Nav ─────────────────────────────────────────────────────── */}
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/20 bg-white/60 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <VRTekLogo className="h-9" />
+          <TechYardLogo className="h-9" />
           <div className="flex items-center gap-3">
             <Link
               href="/services"
@@ -167,14 +167,14 @@ export default function Home() {
                       <div className="w-3 h-3 rounded-full bg-green-400" />
                     </div>
                     <div className="flex-1 mx-4 rounded-md bg-gray-200/60 px-3 py-1 text-xs text-gray-400 font-mono">
-                      app.vrtek.ca/chat
+                      app.techyard.systems/chat
                     </div>
                   </div>
                   {/* Mini chat UI */}
                   <div className="p-6 space-y-4">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-8 h-8 rounded-lg bg-brand-gradient flex items-center justify-center text-white text-xs font-bold">T</div>
-                      <span className="text-sm font-semibold text-brand-navy">VRTek AI</span>
+                      <span className="text-sm font-semibold text-brand-navy">TechYard AI</span>
                       <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Online</span>
                     </div>
                     {/* Fake msgs */}
@@ -247,7 +247,7 @@ export default function Home() {
                 Ready to transform your operations?
               </h2>
               <p className="text-white/70 text-lg mb-8 max-w-lg mx-auto">
-                Start using VRTek AI to streamline your daily operations.
+                Start using TechYard AI to streamline your daily operations.
               </p>
               <div className="flex justify-center gap-4">
                 <Link
@@ -271,9 +271,9 @@ export default function Home() {
       {/* ── Footer ──────────────────────────────────────────────────── */}
       <footer className="border-t border-gray-200/60 py-8 px-6">
         <div className="mx-auto max-w-7xl flex items-center justify-between">
-          <VRTekLogo className="h-7 opacity-60" />
+          <TechYardLogo className="h-7 opacity-60" />
           <p className="text-sm text-gray-400">
-            &copy; {new Date().getFullYear()} VRTek Consulting. All rights reserved.
+            &copy; {new Date().getFullYear()} TechYard Systems. All rights reserved.
           </p>
         </div>
       </footer>

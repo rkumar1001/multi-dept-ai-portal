@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 import anthropic
+import httpx
 
 from app.agents.registry import execute_tool, get_prompt, get_tools, get_tools_with_slack, is_email_tool, is_slack_tool, is_quickbooks_tool
 from app.config import get_settings
@@ -31,6 +32,16 @@ _MAX_TOOL_RESULT_CHARS = 8000  # Truncate large tool results
 _MAX_TOOL_LOOPS = 5  # Prevent infinite tool loops
 _RATE_LIMIT_RETRIES = 2  # Retries on 429
 _RATE_LIMIT_BASE_DELAY = 5  # Seconds before first retry
+_TOOL_TIMEOUT = 45  # Max seconds for a single tool execution
+
+
+async def _execute_with_timeout(coro, tool_name: str, timeout: int = _TOOL_TIMEOUT) -> dict:
+    """Execute a tool coroutine with a timeout. Returns error dict on timeout."""
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.error("Tool '%s' timed out after %ds", tool_name, timeout)
+        return {"error": f"Tool '{tool_name}' timed out after {timeout}s. The external service may be slow or unavailable."}
 
 
 def _truncate_tool_result(result: Any, max_chars: int = _MAX_TOOL_RESULT_CHARS) -> str:
@@ -62,7 +73,10 @@ class AgentOrchestrator:
     """Manages department-specific AI agents using the Claude API."""
 
     def __init__(self):
-        self.client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self.client = anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            timeout=httpx.Timeout(120.0, connect=10.0),  # 120s total, 10s connect
+        )
         self.model = settings.claude_model
 
     # ── Retry helper ──────────────────────────────────────────────────────────
@@ -174,15 +188,19 @@ class AgentOrchestrator:
                     if block.type == "tool_use":
                         # Email tools
                         if is_email_tool(block.name) and db is not None:
-                            tool_result = await execute_email_tool(block.name, block.input, department, db)
+                            tool_result = await _execute_with_timeout(
+                                execute_email_tool(block.name, block.input, department, db), block.name)
                         # Slack tools
                         elif is_slack_tool(block.name) and db is not None:
-                            tool_result = await execute_slack_tool(block.name, block.input, department, db)
+                            tool_result = await _execute_with_timeout(
+                                execute_slack_tool(block.name, block.input, department, db), block.name)
                         # QuickBooks tools
                         elif is_quickbooks_tool(block.name) and db is not None:
-                            tool_result = await execute_quickbooks_tool(block.name, block.input, department, db)
+                            tool_result = await _execute_with_timeout(
+                                execute_quickbooks_tool(block.name, block.input, department, db), block.name)
                         else:
-                            tool_result = await execute_tool(department, block.name, block.input)
+                            tool_result = await _execute_with_timeout(
+                                execute_tool(department, block.name, block.input), block.name)
 
                         all_tool_calls.append({
                             "tool": block.name,
@@ -314,13 +332,17 @@ class AgentOrchestrator:
                         yield {"type": "tool_status", "name": block.name}
 
                         if is_email_tool(block.name) and db is not None:
-                            tool_result = await execute_email_tool(block.name, block.input, department, db)
+                            tool_result = await _execute_with_timeout(
+                                execute_email_tool(block.name, block.input, department, db), block.name)
                         elif is_slack_tool(block.name) and db is not None:
-                            tool_result = await execute_slack_tool(block.name, block.input, department, db)
+                            tool_result = await _execute_with_timeout(
+                                execute_slack_tool(block.name, block.input, department, db), block.name)
                         elif is_quickbooks_tool(block.name) and db is not None:
-                            tool_result = await execute_quickbooks_tool(block.name, block.input, department, db)
+                            tool_result = await _execute_with_timeout(
+                                execute_quickbooks_tool(block.name, block.input, department, db), block.name)
                         else:
-                            tool_result = await execute_tool(department, block.name, block.input)
+                            tool_result = await _execute_with_timeout(
+                                execute_tool(department, block.name, block.input), block.name)
 
                         all_tool_calls.append({
                             "tool": block.name,
