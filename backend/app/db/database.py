@@ -31,6 +31,8 @@ async def init_db():
     import app.models.usage  # noqa: F401
     import app.models.email_config  # noqa: F401
     import app.models.slack_config  # noqa: F401
+    import app.models.quickbooks_config  # noqa: F401
+    import app.models.ghl_config  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

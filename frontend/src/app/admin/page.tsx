@@ -62,6 +62,15 @@ function AdminPageContent() {
   const [qbStatus, setQbStatus] = useState<Record<string, { realm_id: string; company_name: string | null; is_active: boolean }>>({});
   const [qbConnecting, setQbConnecting] = useState<string | null>(null);
   const [slackConnecting, setSlackConnecting] = useState<string | null>(null);
+  const [emailConnecting, setEmailConnecting] = useState<string | null>(null);
+  const [emailCardError, setEmailCardError] = useState<Record<string, string>>({});
+  const [ghlStatus, setGhlStatus] = useState<Record<string, { location_name: string; location_id: string; is_active: boolean }>>({});
+  const [ghlConnecting, setGhlConnecting] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    email: false, slack: false, quickbooks: false, ghl: false,
+  });
+  const toggleSection = (key: string) =>
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -73,6 +82,7 @@ function AdminPageContent() {
     loadEmailStatus();
     loadSlackStatus();
     loadQbStatus();
+    loadGhlStatus();
 
     // Handle OAuth callback redirect (popup sends postMessage, but also handle direct redirect)
     const emailConnected = searchParams.get("email_connected");
@@ -80,7 +90,8 @@ function AdminPageContent() {
     const qbConnected = searchParams.get("quickbooks_connected");
     const qbError = searchParams.get("quickbooks_error");
     const slackError = searchParams.get("slack_error");
-
+    const ghlConnected = searchParams.get("ghl_connected");
+    const ghlError = searchParams.get("ghl_error");
     if (emailConnected) {
       loadEmailStatus();
       window.history.replaceState({}, "", "/admin");
@@ -115,6 +126,20 @@ function AdminPageContent() {
       window.history.replaceState({}, "", "/admin");
       if (window.opener) { window.opener.postMessage({ type: "quickbooks_error", error: qbError }, window.location.origin); window.close(); return; }
     }
+    if (ghlConnected) {
+      loadGhlStatus();
+      window.history.replaceState({}, "", "/admin");
+      if (window.opener) {
+        window.opener.postMessage({ type: "ghl_connected", dept: ghlConnected }, window.location.origin);
+        window.close();
+        return;
+      }
+    }
+    if (ghlError) {
+      setError(`GoHighLevel connection failed: ${decodeURIComponent(ghlError)}`);
+      window.history.replaceState({}, "", "/admin");
+      if (window.opener) { window.opener.postMessage({ type: "ghl_error", error: ghlError }, window.location.origin); window.close(); return; }
+    }
   }, [router, searchParams]);
 
   const loadEmailStatus = async () => {
@@ -144,11 +169,16 @@ function AdminPageContent() {
   };
 
   const handleConnectEmail = async (dept: string, provider: string) => {
+    setEmailConnecting(`${dept}-${provider}`);
+    setEmailCardError((prev) => ({ ...prev, [dept]: "" }));
     try {
       const { auth_url } = await api.connectDepartmentEmail(dept, provider);
       window.location.href = auth_url;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to connect email");
+      const msg = err instanceof Error ? err.message : "Failed to connect email";
+      setEmailCardError((prev) => ({ ...prev, [dept]: msg }));
+    } finally {
+      setEmailConnecting(null);
     }
   };
 
@@ -280,6 +310,80 @@ function AdminPageContent() {
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to disconnect QuickBooks");
+    }
+  };
+
+  const loadGhlStatus = async () => {
+    try {
+      const statuses = await api.getAllGHLStatus();
+      const map: Record<string, { location_name: string; location_id: string; is_active: boolean }> = {};
+      for (const s of statuses) {
+        map[s.department] = { location_name: s.location_name, location_id: s.location_id, is_active: s.is_active };
+      }
+      setGhlStatus(map);
+    } catch { /* ignore */ }
+  };
+
+  const handleConnectGHL = async (dept: string) => {
+    try {
+      const { auth_url } = await api.connectDepartmentGHL(dept);
+      setGhlConnecting(dept);
+      const popup = window.open(auth_url, "ghl_oauth", "width=700,height=800,scrollbars=yes,resizable=yes");
+      if (!popup) {
+        window.location.href = auth_url;
+        return;
+      }
+      const handleMsg = (e: MessageEvent) => {
+        if (e.data?.type === "ghl_connected") {
+          window.removeEventListener("message", handleMsg);
+          setGhlConnecting(null);
+          loadGhlStatus();
+        } else if (e.data?.type === "ghl_error") {
+          window.removeEventListener("message", handleMsg);
+          setGhlConnecting(null);
+          setError(`GoHighLevel connection failed: ${e.data.error}`);
+        }
+      };
+      window.addEventListener("message", handleMsg);
+      const poll = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(poll);
+          window.removeEventListener("message", handleMsg);
+          setGhlConnecting(null);
+          loadGhlStatus();
+        }
+      }, 800);
+    } catch (err: unknown) {
+      setGhlConnecting(null);
+      setError(err instanceof Error ? err.message : "Failed to connect GoHighLevel");
+    }
+  };
+
+  const handleSetupGHLApiKey = async () => {
+    setGhlConnecting("__api_key__");
+    try {
+      const result = await api.setupGHLApiKey();
+      await loadGhlStatus();
+      setError("");
+      alert(`GoHighLevel connected via API Key!\nLocation: ${result.location_name}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to setup GHL API Key");
+    } finally {
+      setGhlConnecting(null);
+    }
+  };
+
+  const handleDisconnectGHL = async (dept: string) => {
+    if (!confirm(`Disconnect GoHighLevel for ${DEPARTMENT_CONFIG[dept]?.label || dept}?`)) return;
+    try {
+      await api.disconnectDepartmentGHL(dept);
+      setGhlStatus((prev) => {
+        const next = { ...prev };
+        delete next[dept];
+        return next;
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect GoHighLevel");
     }
   };
 
@@ -500,53 +604,79 @@ function AdminPageContent() {
             </div>
 
             {/* Email Integration */}
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Email Integration</h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
-              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
-                const cfg = DEPARTMENT_CONFIG[dept];
-                const email = emailStatus[dept];
-                return (
-                  <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">{cfg?.icon}</span>
-                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
-                    </div>
-                    {email ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs font-medium text-green-700 capitalize">{email.provider}</span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate mb-3" title={email.email_address}>{email.email_address}</p>
-                        <button
-                          onClick={() => handleDisconnectEmail(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleConnectEmail(dept, "gmail")}
-                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            Gmail
-                          </button>
-                          <button
-                            onClick={() => handleConnectEmail(dept, "outlook")}
-                            className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            Outlook
-                          </button>
-                        </div>
-                      </div>
-                    )}
+            <div className="mb-6">
+              <button
+                onClick={() => toggleSection("email")}
+                className="w-full flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm border border-gray-200 hover:bg-gray-50 transition mb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">✉️</span>
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">Email Integration</h2>
+                    <p className="text-xs text-gray-400">Gmail &amp; Outlook — connect per department</p>
                   </div>
-                );
-              })}
+                </div>
+                <span className={`text-gray-400 text-lg transition-transform duration-200 ${openSections.email ? "rotate-180" : ""}`}>⌄</span>
+              </button>
+              {openSections.email && (
+                <div className="pt-3">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-2">
+                    {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                      const cfg = DEPARTMENT_CONFIG[dept];
+                      const email = emailStatus[dept];
+                      const cardErr = emailCardError[dept];
+                      const connectingGmail = emailConnecting === `${dept}-gmail`;
+                      const connectingOutlook = emailConnecting === `${dept}-outlook`;
+                      return (
+                        <div key={dept} className="rounded-xl bg-white p-5 shadow-sm border border-gray-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">{cfg?.icon}</span>
+                            <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                          </div>
+                          {email ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <span className="text-xs font-medium text-green-700 capitalize">{email.provider}</span>
+                              </div>
+                              <p className="text-xs text-gray-500 truncate mb-3" title={email.email_address}>{email.email_address}</p>
+                              <button
+                                onClick={() => handleDisconnectEmail(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleConnectEmail(dept, "gmail")}
+                                  disabled={connectingGmail || connectingOutlook}
+                                  className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                                >
+                                  {connectingGmail ? "..." : "Gmail"}
+                                </button>
+                                <button
+                                  onClick={() => handleConnectEmail(dept, "outlook")}
+                                  disabled={connectingGmail || connectingOutlook}
+                                  className="flex-1 text-xs py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition disabled:opacity-50"
+                                >
+                                  {connectingOutlook ? "..." : "Outlook"}
+                                </button>
+                              </div>
+                              {cardErr && (
+                                <p className="mt-2 text-xs text-red-500 break-words">{cardErr}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Department KPI Insights */}
@@ -585,111 +715,231 @@ function AdminPageContent() {
             )}
 
             {/* Slack Integration */}
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Slack Integration</h2>
-            <p className="text-xs text-gray-400 mb-4 -mt-2">
-              A Slack authorization window will open. Complete sign-in there — you will stay logged in here.
-            </p>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
-              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
-                const cfg = DEPARTMENT_CONFIG[dept];
-                const slack = slackStatus[dept];
-                const connecting = slackConnecting === dept;
-                return (
-                  <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-purple-300 bg-purple-50/30" : "border-gray-200"}`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">{cfg?.icon}</span>
-                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
-                    </div>
-                    {slack ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs font-medium text-green-700">Connected</span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate mb-3" title={slack.team_name}>{slack.team_name}</p>
-                        <button
-                          onClick={() => handleDisconnectSlack(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : connecting ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                          <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
-                        </div>
-                        <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
-                        <button
-                          onClick={() => handleConnectSlack(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-[#4A154B] text-[#4A154B] hover:bg-[#4A154B] hover:text-white transition"
-                        >
-                          Connect Slack
-                        </button>
-                      </div>
-                    )}
+            <div className="mb-6">
+              <button
+                onClick={() => toggleSection("slack")}
+                className="w-full flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm border border-gray-200 hover:bg-gray-50 transition mb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">💬</span>
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">Slack Integration</h2>
+                    <p className="text-xs text-gray-400">Connect Slack workspaces per department</p>
                   </div>
-                );
-              })}
+                </div>
+                <span className={`text-gray-400 text-lg transition-transform duration-200 ${openSections.slack ? "rotate-180" : ""}`}>⌄</span>
+              </button>
+              {openSections.slack && (
+                <div className="pt-3">
+                  <p className="text-xs text-gray-400 mb-3">
+                    A Slack authorization window will open. Complete sign-in there — you will stay logged in here.
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-2">
+                    {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                      const cfg = DEPARTMENT_CONFIG[dept];
+                      const slack = slackStatus[dept];
+                      const connecting = slackConnecting === dept;
+                      return (
+                        <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-purple-300 bg-purple-50/30" : "border-gray-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">{cfg?.icon}</span>
+                            <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                          </div>
+                          {slack ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <span className="text-xs font-medium text-green-700">Connected</span>
+                              </div>
+                              <p className="text-xs text-gray-500 truncate mb-3" title={slack.team_name}>{slack.team_name}</p>
+                              <button
+                                onClick={() => handleDisconnectSlack(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : connecting ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
+                              </div>
+                              <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                              <button
+                                onClick={() => handleConnectSlack(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-[#4A154B] text-[#4A154B] hover:bg-[#4A154B] hover:text-white transition"
+                              >
+                                Connect Slack
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* QuickBooks Integration */}
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">QuickBooks Integration</h2>
-            <p className="text-xs text-gray-400 mb-4 -mt-2">
-              A QuickBooks authorization window will open. Complete sign-in there — you will stay logged in here.
-            </p>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
-              {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
-                const cfg = DEPARTMENT_CONFIG[dept];
-                const qb = qbStatus[dept];
-                const connecting = qbConnecting === dept;
-                return (
-                  <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-green-300 bg-green-50/30" : "border-gray-200"}`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">{cfg?.icon}</span>
-                      <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
-                    </div>
-                    {qb ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs font-medium text-green-700">Connected</span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate mb-3" title={qb.company_name || qb.realm_id}>{qb.company_name || `Realm: ${qb.realm_id}`}</p>
-                        <button
-                          onClick={() => handleDisconnectQuickBooks(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : connecting ? (
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                          <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
-                        </div>
-                        <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs text-gray-400 mb-3">Not connected</p>
-                        <button
-                          onClick={() => handleConnectQuickBooks(dept)}
-                          className="w-full text-xs py-1.5 rounded-lg border border-[#2CA01C] text-[#2CA01C] hover:bg-[#2CA01C] hover:text-white transition"
-                        >
-                          Connect QuickBooks
-                        </button>
-                      </div>
-                    )}
+            <div className="mb-6">
+              <button
+                onClick={() => toggleSection("quickbooks")}
+                className="w-full flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm border border-gray-200 hover:bg-gray-50 transition mb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">📊</span>
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">QuickBooks Integration</h2>
+                    <p className="text-xs text-gray-400">Accounting &amp; invoicing per department</p>
                   </div>
-                );
-              })}
+                </div>
+                <span className={`text-gray-400 text-lg transition-transform duration-200 ${openSections.quickbooks ? "rotate-180" : ""}`}>⌄</span>
+              </button>
+              {openSections.quickbooks && (
+                <div className="pt-3">
+                  <p className="text-xs text-gray-400 mb-3">
+                    A QuickBooks authorization window will open. Complete sign-in there — you will stay logged in here.
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-2">
+                    {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                      const cfg = DEPARTMENT_CONFIG[dept];
+                      const qb = qbStatus[dept];
+                      const connecting = qbConnecting === dept;
+                      return (
+                        <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-green-300 bg-green-50/30" : "border-gray-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">{cfg?.icon}</span>
+                            <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                          </div>
+                          {qb ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <span className="text-xs font-medium text-green-700">Connected</span>
+                              </div>
+                              <p className="text-xs text-gray-500 truncate mb-3" title={qb.company_name || qb.realm_id}>{qb.company_name || `Realm: ${qb.realm_id}`}</p>
+                              <button
+                                onClick={() => handleDisconnectQuickBooks(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : connecting ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                <span className="text-xs font-medium text-yellow-700">Waiting for authorization...</span>
+                              </div>
+                              <p className="text-xs text-gray-400">Complete sign-in in the popup window.</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                              <button
+                                onClick={() => handleConnectQuickBooks(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-[#2CA01C] text-[#2CA01C] hover:bg-[#2CA01C] hover:text-white transition"
+                              >
+                                Connect QuickBooks
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* GoHighLevel CRM Integration */}
+            <div className="mb-6">
+              <button
+                onClick={() => toggleSection("ghl")}
+                className="w-full flex items-center justify-between rounded-xl bg-white px-5 py-4 shadow-sm border border-gray-200 hover:bg-gray-50 transition mb-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">🚀</span>
+                  <div className="text-left">
+                    <h2 className="text-sm font-semibold text-gray-900">GoHighLevel CRM</h2>
+                    <p className="text-xs text-gray-400">Connect GHL locations per department</p>
+                  </div>
+                </div>
+                <span className={`text-gray-400 text-lg transition-transform duration-200 ${openSections.ghl ? "rotate-180" : ""}`}>⌄</span>
+              </button>
+              {openSections.ghl && (
+                <div className="pt-3">
+                  {/* API Key quick-connect banner */}
+                  {Object.keys(ghlStatus).length === 0 && (
+                    <div className="mb-4 flex items-center justify-between rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-orange-800">Connect all departments at once</p>
+                        <p className="text-xs text-orange-600 mt-0.5">Uses the Private Integration Token configured in .env</p>
+                      </div>
+                      <button
+                        onClick={handleSetupGHLApiKey}
+                        disabled={ghlConnecting === "__api_key__"}
+                        className="ml-4 flex-shrink-0 rounded-lg bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600 transition disabled:opacity-50"
+                      >
+                        {ghlConnecting === "__api_key__" ? "Connecting..." : "Connect via API Key"}
+                      </button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-2">
+                    {["sales", "finance", "accounting", "restaurant", "logistics"].map((dept) => {
+                      const cfg = DEPARTMENT_CONFIG[dept];
+                      const ghl = ghlStatus[dept];
+                      const connecting = ghlConnecting === dept;
+                      return (
+                        <div key={dept} className={`rounded-xl bg-white p-5 shadow-sm border transition ${connecting ? "border-orange-300 bg-orange-50/30" : "border-gray-200"}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">{cfg?.icon}</span>
+                            <h3 className={`text-sm font-semibold ${cfg?.color || "text-gray-700"}`}>{cfg?.label || dept}</h3>
+                          </div>
+                          {ghl ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-green-500" />
+                                <span className="text-xs font-medium text-green-700">Connected</span>
+                              </div>
+                              <p className="text-xs text-gray-500 truncate mb-3" title={ghl.location_name}>{ghl.location_name}</p>
+                              <button
+                                onClick={() => handleDisconnectGHL(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : connecting ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                <span className="text-xs font-medium text-yellow-700">Connecting...</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-gray-400 mb-3">Not connected</p>
+                              <button
+                                onClick={() => handleConnectGHL(dept)}
+                                className="w-full text-xs py-1.5 rounded-lg border border-orange-300 text-orange-600 hover:bg-orange-50 transition"
+                              >
+                                Connect GHL
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Department Detail Cards */}

@@ -41,7 +41,7 @@ class ChatResponse(BaseModel):
 @router.post("", response_model=ChatResponse)
 async def send_message(
     body: ChatRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user), #chat message endpoint from file:auth_middleware.py get_current_user function verify the token and return user info in payload
     db: AsyncSession = Depends(get_db),
 ):
     # Get or create conversation
@@ -106,7 +106,8 @@ async def send_message(
             detail="AI service temporarily unavailable. Please try again.",
         )
 
-    # Save assistant message
+    # Save assistant message — commit immediately so it is never lost
+    # even if usage recording fails below.
     assistant_msg = Message(
         conversation_id=conversation.id,
         role="assistant",
@@ -114,18 +115,22 @@ async def send_message(
         tool_calls=agent_response.tool_calls if agent_response.tool_calls else None,
         token_count=agent_response.input_tokens + agent_response.output_tokens,
     )
-    db.add(assistant_msg)
+    db.add(assistant_msg) #add database to session 
+    await db.commit()
 
-    # Record usage
-    await record_usage(
-        db=db,
-        user_id=current_user.id,
-        department=current_user.department,
-        input_tokens=agent_response.input_tokens,
-        output_tokens=agent_response.output_tokens,
-        tool_calls_count=len(agent_response.tool_calls),
-        model=agent_response.model,
-    )
+    # Record usage — best-effort, never fail the request over this.
+    try:
+        await record_usage(
+            db=db,
+            user_id=current_user.id,
+            department=current_user.department,
+            input_tokens=agent_response.input_tokens,
+            output_tokens=agent_response.output_tokens,
+            tool_calls_count=len(agent_response.tool_calls),
+            model=agent_response.model,
+        )
+    except Exception as e:
+        logger.error("Failed to record usage (non-fatal): %s", e)
 
     return ChatResponse(
         conversation_id=str(conversation.id),

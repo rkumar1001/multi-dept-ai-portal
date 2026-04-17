@@ -38,5 +38,5 @@ export interface Integration {
   connected: boolean;
   color: string;
   oauthRequired?: boolean;  // true = needs admin OAuth (Slack, Email, QuickBooks)
-  connectType?: "slack" | "gmail" | "outlook" | "quickbooks";
+  connectType?: "slack" | "gmail" | "outlook" | "quickbooks" | "ghl";
 }

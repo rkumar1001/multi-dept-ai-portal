@@ -18,8 +18,11 @@ from app.departments.logistics import prompts as logistics_prompts
 from app.departments.common.email_tools import EMAIL_TOOLS, is_email_tool  # noqa: F401 — re-exported
 from app.departments.common.slack_tools import SLACK_TOOLS, is_slack_tool  # noqa: F401 — re-exported
 from app.departments.common.quickbooks_tools import QUICKBOOKS_TOOLS, is_quickbooks_tool  # noqa: F401 — re-exported
+from app.departments.common.ghl_tools import GHL_TOOLS, is_ghl_tool  # noqa: F401 — re-exported
 from app.departments.common.weather_tools import WEATHER_TOOLS, is_weather_tool, execute_weather_tool
 
+
+#mapping of department to its tools, prompt, and executor function
 _REGISTRY: dict[str, dict] = {
     "sales": {"tools": sales_tools.TOOLS, "prompt": sales_prompts.SYSTEM_PROMPT, "execute": sales_tools.execute_tool},
     "finance": {"tools": finance_tools.TOOLS, "prompt": finance_prompts.SYSTEM_PROMPT, "execute": finance_tools.execute_tool},
@@ -28,11 +31,15 @@ _REGISTRY: dict[str, dict] = {
     "logistics": {"tools": logistics_tools.TOOLS, "prompt": logistics_prompts.SYSTEM_PROMPT, "execute": logistics_tools.execute_tool},
 }
 
+#Store Keys used for validation and lookups
 SUPPORTED_DEPARTMENTS = list(_REGISTRY.keys())
 
 
+# Get tools for a department and validate it exists
+# Returns department tools along with shared email and weather tools
 def get_tools(department: str) -> list[dict]:
     entry = _REGISTRY.get(department)
+    #Checks if the department exists
     if entry is None:
         raise KeyError(f"Unknown department: {department}")
     return entry["tools"] + EMAIL_TOOLS + WEATHER_TOOLS
@@ -41,10 +48,19 @@ def get_tools(department: str) -> list[dict]:
 async def get_tools_with_slack(department: str, db: AsyncSession | None = None) -> list[dict]:
     """Return department tools + email tools + weather tools + slack tools + quickbooks tools (only if connected)."""
     entry = _REGISTRY.get(department)
+
+    #Validate department exists
     if entry is None:
         raise KeyError(f"Unknown department: {department}")
+    
+    # Start with base tools + common tools
     tools = entry["tools"] + EMAIL_TOOLS + WEATHER_TOOLS
+
+    # Only check integrations if DB session is provided
     if db is not None:
+
+        #Slack
+        #Load only when needed to avoid circular imports and unnecessary DB queries
         from app.models.slack_config import DepartmentSlackConfig
         result = await db.execute(
             select(DepartmentSlackConfig).where(
@@ -52,9 +68,11 @@ async def get_tools_with_slack(department: str, db: AsyncSession | None = None) 
                 DepartmentSlackConfig.is_active.is_(True),
             )
         )
+        # If Slack config exists → add Slack tools
         if result.scalar_one_or_none() is not None:
             tools = tools + SLACK_TOOLS
 
+        #Quickbooks
         from app.models.quickbooks_config import DepartmentQuickBooksConfig
         qb_result = await db.execute(
             select(DepartmentQuickBooksConfig).where(
@@ -64,11 +82,24 @@ async def get_tools_with_slack(department: str, db: AsyncSession | None = None) 
         )
         if qb_result.scalar_one_or_none() is not None:
             tools = tools + QUICKBOOKS_TOOLS
+
+        #GoHighLevel
+        from app.models.ghl_config import DepartmentGHLConfig
+        ghl_result = await db.execute(
+            select(DepartmentGHLConfig).where(
+                DepartmentGHLConfig.department == department,
+                DepartmentGHLConfig.is_active.is_(True),
+            )
+        )
+        if ghl_result.scalar_one_or_none() is not None:
+            tools = tools + GHL_TOOLS
+
     return tools
 
 
 def get_prompt(department: str) -> str:
     entry = _REGISTRY.get(department)
+    #if deptt not found return error
     if entry is None:
         raise KeyError(f"Unknown department: {department}")
     return entry["prompt"]

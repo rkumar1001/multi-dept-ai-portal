@@ -863,8 +863,18 @@ function ChatPageContent() {
         )
       );
     }).catch(() => { /* QuickBooks not connected */ });
+    // Check GoHighLevel connection status
+    api.getGHLStatus(dept).then(() => {
+      setIntegrations((prev) =>
+        prev.map((integ) =>
+          integ.connectType === "ghl"
+            ? { ...integ, active: true, connected: true }
+            : integ
+        )
+      );
+    }).catch(() => { /* GHL not connected */ });
     // Clear OAuth redirect params from URL
-    if (searchParams.get("slack_connected") || searchParams.get("email_connected") || searchParams.get("quickbooks_connected")) {
+    if (searchParams.get("slack_connected") || searchParams.get("email_connected") || searchParams.get("quickbooks_connected") || searchParams.get("ghl_connected")) {
       window.history.replaceState({}, "", "/chat");
     }
     loadConversations();
@@ -1220,6 +1230,7 @@ function ChatPageContent() {
                             if (integ.connectType === "slack") await api.disconnectDepartmentSlack(department);
                             else if (integ.connectType === "gmail" || integ.connectType === "outlook") await api.disconnectDepartmentEmail(department);
                             else if (integ.connectType === "quickbooks") await api.disconnectDepartmentQuickBooks(department);
+                            else if (integ.connectType === "ghl") await api.disconnectDepartmentGHL(department);
                             setIntegrations((prev) => prev.map((i) => i.id === integ.id && i.department === integ.department ? { ...i, active: false, connected: false } : i));
                           } catch { /* ignore */ }
                         }}
@@ -1253,6 +1264,9 @@ function ChatPageContent() {
                           } else if (integ.connectType === "quickbooks") {
                             const { auth_url } = await api.connectDepartmentQuickBooks(department);
                             window.location.href = auth_url;
+                          } else if (integ.connectType === "ghl") {
+                            const { auth_url } = await api.connectDepartmentGHL(department);
+                            window.open(auth_url, "ghl_oauth", "width=700,height=800,scrollbars=yes,resizable=yes");
                           }
                         } catch { /* ignore */ }
                       }}

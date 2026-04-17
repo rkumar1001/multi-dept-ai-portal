@@ -16,20 +16,21 @@ export function getIntegrations(userDept: string): Integration[] {
     { id: "slack",          name: "Slack",          icon: "💬", active: false, department: "restaurant", connected: false, color: "#4A154B", oauthRequired: true, connectType: "slack"   },
 
     // ── Finance ────────────────────────────────────────────────────────
-    { id: "quickbooks", name: "QuickBooks", icon: "📊", active: false, department: "finance", connected: false, color: "#22c55e" },
+    { id: "quickbooks", name: "QuickBooks", icon: "📊", active: false, department: "finance", connected: false, color: "#2CA01C", oauthRequired: true, connectType: "quickbooks" },
     { id: "gmail",      name: "Gmail",      icon: "✉️", active: false, department: "finance", connected: false, color: "#EA4335", oauthRequired: true, connectType: "gmail"   },
     { id: "outlook",    name: "Outlook",    icon: "📧", active: false, department: "finance", connected: false, color: "#0078D4", oauthRequired: true, connectType: "outlook" },
     { id: "slack",      name: "Slack",      icon: "💬", active: false, department: "finance", connected: false, color: "#4A154B", oauthRequired: true, connectType: "slack"   },
 
     // ── Accounting ─────────────────────────────────────────────────────
-    { id: "gmail",   name: "Gmail",   icon: "✉️", active: false, department: "accounting", connected: false, color: "#EA4335", oauthRequired: true, connectType: "gmail"   },
-    { id: "outlook", name: "Outlook", icon: "📧", active: false, department: "accounting", connected: false, color: "#0078D4", oauthRequired: true, connectType: "outlook" },
-    { id: "slack",   name: "Slack",   icon: "💬", active: false, department: "accounting", connected: false, color: "#4A154B", oauthRequired: true, connectType: "slack"   },
+    { id: "quickbooks", name: "QuickBooks", icon: "📊", active: false, department: "accounting", connected: false, color: "#2CA01C", oauthRequired: true, connectType: "quickbooks" },
+    { id: "gmail",      name: "Gmail",      icon: "✉️", active: false, department: "accounting", connected: false, color: "#EA4335", oauthRequired: true, connectType: "gmail"   },
+    { id: "outlook",    name: "Outlook",    icon: "📧", active: false, department: "accounting", connected: false, color: "#0078D4", oauthRequired: true, connectType: "outlook" },
+    { id: "slack",      name: "Slack",      icon: "💬", active: false, department: "accounting", connected: false, color: "#4A154B", oauthRequired: true, connectType: "slack"   },
 
     // ── Sales ──────────────────────────────────────────────────────────
-    { id: "gmail",   name: "Gmail",   icon: "✉️", active: false, department: "sales", connected: false, color: "#EA4335", oauthRequired: true, connectType: "gmail"   },
-    { id: "outlook", name: "Outlook", icon: "📧", active: false, department: "sales", connected: false, color: "#0078D4", oauthRequired: true, connectType: "outlook" },
-    { id: "slack",   name: "Slack",   icon: "💬", active: false, department: "sales", connected: false, color: "#4A154B", oauthRequired: true, connectType: "slack"   },
+    { id: "gmail",      name: "Gmail",       icon: "✉️", active: false, department: "sales", connected: false, color: "#EA4335", oauthRequired: true, connectType: "gmail"   },
+    { id: "outlook",    name: "Outlook",     icon: "📧", active: false, department: "sales", connected: false, color: "#0078D4", oauthRequired: true, connectType: "outlook" },
+    { id: "slack",      name: "Slack",       icon: "💬", active: false, department: "sales", connected: false, color: "#4A154B", oauthRequired: true, connectType: "slack"   },
   ];
 
   return all
