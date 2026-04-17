@@ -5,6 +5,7 @@ plus status endpoints for any authenticated user.
 """
 
 import logging
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -17,7 +18,8 @@ from app.config import get_settings
 from app.db.database import get_db
 from app.middleware.auth_middleware import CurrentUser, get_current_user, require_admin
 from app.models.ghl_config import DepartmentGHLConfig, encrypt_token
-from app.services.ghl_service import get_ghl_auth_url, exchange_ghl_code
+import httpx
+from app.services.ghl_service import get_ghl_auth_url, exchange_ghl_code, GHL_API
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -35,7 +37,11 @@ class GHLStatusResponse(BaseModel):
 
 
 def _encode_state(department: str) -> str:
-    payload = {"department": department, "type": "ghl_oauth"}
+    payload = {
+        "department": department,
+        "type": "ghl_oauth",
+        "exp": datetime.utcnow() + timedelta(minutes=5),
+    }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
@@ -47,6 +53,67 @@ def _decode_state(state: str) -> dict:
         return payload
     except JWTError as e:
         raise ValueError(f"Invalid state parameter: {e}")
+
+
+DEPARTMENTS = ["sales", "finance", "accounting", "restaurant", "logistics"]
+
+
+@router.post("/setup-api-key")
+async def setup_ghl_api_key(
+    admin: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin-only: connect all departments using the GHL_API_KEY from .env."""
+    settings = get_settings()
+    api_key = settings.ghl_api_key
+    if not api_key:
+        raise HTTPException(status_code=400, detail="GHL_API_KEY not set in .env")
+
+    location_id = settings.ghl_location_id
+    if not location_id:
+        raise HTTPException(
+            status_code=400,
+            detail="GHL_LOCATION_ID not set in .env. Find it in your GHL URL: app.gohighlevel.com/v2/location/{YOUR_ID}/..."
+        )
+
+    # Try to fetch location name from GHL API
+    location_name = location_id
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            resp = await client.get(
+                f"{GHL_API}/locations/{location_id}",
+                headers={"Authorization": f"Bearer {api_key}", "Version": "2021-07-28"},
+            )
+            if resp.is_success:
+                data = resp.json()
+                location_name = data.get("location", {}).get("name", location_id) or location_id
+    except Exception as e:
+        logger.warning("Could not fetch GHL location name: %s", e)
+
+    from datetime import datetime, timezone, timedelta
+    from app.models.ghl_config import encrypt_token
+
+    # Upsert a config entry for every department
+    for dept in DEPARTMENTS:
+        await db.execute(
+            delete(DepartmentGHLConfig).where(DepartmentGHLConfig.department == dept)
+        )
+        config = DepartmentGHLConfig(
+            department=dept,
+            location_id=location_id,
+            location_name=location_name,
+            company_id=None,
+            access_token=encrypt_token(api_key),
+            refresh_token=encrypt_token(""),
+            token_expires_at=datetime.now(timezone.utc) + timedelta(days=3650),
+            user_id=None,
+            is_active=True,
+        )
+        db.add(config)
+
+    await db.commit()
+    logger.info("GHL API key setup complete for all departments: location=%s", location_name)
+    return {"status": "connected", "location_id": location_id, "location_name": location_name, "departments": DEPARTMENTS}
 
 
 @router.get("/connect/{department}")

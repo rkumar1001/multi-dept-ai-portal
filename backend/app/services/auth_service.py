@@ -30,7 +30,7 @@ def create_access_token(user_id: str, department: str, role: str) -> str:
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
-
+# Decode and verify JWT token, return payload if valid or None if invalid/expired
 def decode_access_token(token: str) -> dict | None:
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])

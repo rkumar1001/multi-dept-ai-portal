@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     ghl_redirect_uri: str = "http://localhost:8000/api/v1/crm/callback"
     ghl_environment: str = "sandbox"  # "sandbox" | "production"
 
+    # GoHighLevel API Key (Private Integration Token — bypasses OAuth)
+    ghl_api_key: str = ""
+    ghl_location_id: str = ""
+
     model_config = {"env_file": str(_ENV_FILE), "extra": "ignore"}
 
 #it stores once load all data and 

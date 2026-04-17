@@ -8,6 +8,8 @@ from urllib.parse import urlencode
 
 import httpx
 from sqlalchemy import select
+
+_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -43,7 +45,7 @@ def _auth_header() -> str:
 
 async def exchange_quickbooks_code(code: str) -> dict[str, Any]:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             QB_TOKEN_URL,
             headers={
@@ -69,7 +71,7 @@ async def exchange_quickbooks_code(code: str) -> dict[str, Any]:
 
 async def refresh_quickbooks_token(refresh_token_encrypted: str) -> dict[str, Any]:
     token = decrypt_token(refresh_token_encrypted)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             QB_TOKEN_URL,
             headers={
@@ -149,7 +151,7 @@ async def quickbooks_api_request(
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.request(method, url, headers=headers, params=params, json=json_data)
         resp.raise_for_status()
         return resp.json()

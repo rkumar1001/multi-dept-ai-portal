@@ -218,7 +218,7 @@ async def execute_ghl_tool(
             return {"contact": contact, "location": config.location_name, "created": True}
 
         elif tool_name == "ghl_update_contact":
-            contact_id = tool_input.pop("contact_id")
+            contact_id = tool_input["contact_id"]
             contact_data = {}
             if tool_input.get("first_name"):
                 contact_data["firstName"] = tool_input["first_name"]

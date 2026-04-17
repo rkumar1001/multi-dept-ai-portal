@@ -300,4 +300,32 @@ export const api = {
       { method: "DELETE" }
     ),
 
+  // GoHighLevel CRM
+  getGHLStatus: (department: string) =>
+    apiFetch<{ department: string; location_id: string; location_name: string; company_id: string | null; is_active: boolean; connected_at: string }>(
+      `/api/v1/crm/status/${department}`
+    ),
+
+  getAllGHLStatus: () =>
+    apiFetch<{ department: string; location_id: string; location_name: string; company_id: string | null; is_active: boolean; connected_at: string }[]>(
+      "/api/v1/crm/status"
+    ),
+
+  setupGHLApiKey: () =>
+    apiFetch<{ status: string; location_id: string; location_name: string; departments: string[] }>(
+      "/api/v1/crm/setup-api-key",
+      { method: "POST" }
+    ),
+
+  connectDepartmentGHL: (department: string) =>
+    apiFetch<{ auth_url: string }>(
+      `/api/v1/crm/connect/${department}`
+    ),
+
+  disconnectDepartmentGHL: (department: string) =>
+    apiFetch<{ status: string; department: string }>(
+      `/api/v1/crm/disconnect/${department}`,
+      { method: "DELETE" }
+    ),
+
 };

@@ -5,6 +5,8 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select
+
+_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -41,7 +43,7 @@ def get_slack_auth_url(state: str) -> str:
 
 async def exchange_slack_code(code: str) -> dict[str, Any]:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(SLACK_TOKEN_URL, data={
             "code": code,
             "client_id": settings.slack_client_id,
@@ -77,7 +79,7 @@ async def get_valid_token(db: AsyncSession, department: str) -> tuple[str, Depar
 
 
 async def _slack_get(token: str, method: str, params: dict | None = None) -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             f"{SLACK_API}/{method}",
             headers={"Authorization": f"Bearer {token}"},
@@ -91,7 +93,7 @@ async def _slack_get(token: str, method: str, params: dict | None = None) -> dic
 
 
 async def _slack_post(token: str, method: str, json_body: dict) -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             f"{SLACK_API}/{method}",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},

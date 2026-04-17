@@ -8,6 +8,8 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select
+# Solves "RuntimeError: Event loop is closed" in some environments (e.g. Windows with certain Python versions) 
+_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -63,7 +65,7 @@ def get_outlook_auth_url(state: str) -> str:
 
 async def exchange_gmail_code(code: str) -> dict[str, Any]:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(GMAIL_TOKEN_URL, data={
             "code": code,
             "client_id": settings.google_client_id,
@@ -90,7 +92,7 @@ async def exchange_gmail_code(code: str) -> dict[str, Any]:
 
 async def exchange_outlook_code(code: str) -> dict[str, Any]:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(f"{_ms_auth_url()}/token", data={
             "code": code,
             "client_id": settings.microsoft_client_id,
@@ -99,7 +101,9 @@ async def exchange_outlook_code(code: str) -> dict[str, Any]:
             "grant_type": "authorization_code",
             "scope": MS_SCOPES,
         })
-        resp.raise_for_status()
+        if not resp.is_success:
+            logger.error("Microsoft token exchange failed %s: %s", resp.status_code, resp.text)
+            resp.raise_for_status()
         tokens = resp.json()
 
         # Get user email
@@ -119,7 +123,7 @@ async def exchange_outlook_code(code: str) -> dict[str, Any]:
 
 async def _refresh_gmail_token(refresh_token: str) -> dict[str, Any]:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(GMAIL_TOKEN_URL, data={
             "refresh_token": refresh_token,
             "client_id": settings.google_client_id,
@@ -133,7 +137,7 @@ async def _refresh_gmail_token(refresh_token: str) -> dict[str, Any]:
 
 async def _refresh_outlook_token(refresh_token: str) -> dict[str, Any]:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(f"{_ms_auth_url()}/token", data={
             "refresh_token": refresh_token,
             "client_id": settings.microsoft_client_id,
@@ -192,7 +196,7 @@ async def get_valid_token(db: AsyncSession, department: str) -> tuple[str, Depar
 
 
 async def gmail_search(token: str, query: str, max_results: int = 10) -> list[dict]:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             "https://www.googleapis.com/gmail/v1/users/me/messages",
             headers={"Authorization": f"Bearer {token}"},
@@ -224,7 +228,7 @@ async def gmail_search(token: str, query: str, max_results: int = 10) -> list[di
 
 
 async def gmail_get_message(token: str, message_id: str) -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             f"https://www.googleapis.com/gmail/v1/users/me/messages/{message_id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -268,7 +272,7 @@ async def gmail_send(token: str, to: str, subject: str, body: str, cc: str = "",
         msg["bcc"] = bcc
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             "https://www.googleapis.com/gmail/v1/users/me/messages/send",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -291,7 +295,7 @@ async def gmail_reply(token: str, message_id: str, body: str) -> dict:
     msg["References"] = message_id
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             "https://www.googleapis.com/gmail/v1/users/me/messages/send",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -308,7 +312,7 @@ async def gmail_create_draft(token: str, to: str, subject: str, body: str) -> di
     msg["subject"] = subject
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             "https://www.googleapis.com/gmail/v1/users/me/drafts",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -320,7 +324,7 @@ async def gmail_create_draft(token: str, to: str, subject: str, body: str) -> di
 
 
 async def gmail_list_labels(token: str) -> list[dict]:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             "https://www.googleapis.com/gmail/v1/users/me/labels",
             headers={"Authorization": f"Bearer {token}"},
@@ -333,7 +337,7 @@ async def gmail_list_labels(token: str) -> list[dict]:
 
 
 async def outlook_search(token: str, query: str, max_results: int = 10) -> list[dict]:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             f"{GRAPH_BASE}/me/messages",
             headers={"Authorization": f"Bearer {token}"},
@@ -354,7 +358,7 @@ async def outlook_search(token: str, query: str, max_results: int = 10) -> list[
 
 
 async def outlook_get_message(token: str, message_id: str) -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             f"{GRAPH_BASE}/me/messages/{message_id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -386,7 +390,7 @@ async def outlook_send(token: str, to: str, subject: str, body: str, cc: str = "
     if bcc:
         message["bccRecipients"] = [{"emailAddress": {"address": addr.strip()}} for addr in bcc.split(",")]
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             f"{GRAPH_BASE}/me/sendMail",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -397,7 +401,7 @@ async def outlook_send(token: str, to: str, subject: str, body: str, cc: str = "
 
 
 async def outlook_reply(token: str, message_id: str, body: str) -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             f"{GRAPH_BASE}/me/messages/{message_id}/reply",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -413,7 +417,7 @@ async def outlook_create_draft(token: str, to: str, subject: str, body: str) -> 
         "body": {"contentType": "Text", "content": body},
         "toRecipients": [{"emailAddress": {"address": addr.strip()}} for addr in to.split(",")],
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             f"{GRAPH_BASE}/me/messages",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -425,7 +429,7 @@ async def outlook_create_draft(token: str, to: str, subject: str, body: str) -> 
 
 
 async def outlook_list_folders(token: str) -> list[dict]:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             f"{GRAPH_BASE}/me/mailFolders",
             headers={"Authorization": f"Bearer {token}"},

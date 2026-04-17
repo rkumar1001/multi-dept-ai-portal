@@ -7,6 +7,8 @@ from urllib.parse import urlencode
 
 import httpx
 from sqlalchemy import select
+
+_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -52,7 +54,7 @@ def get_ghl_auth_url(state: str) -> str:
 
 async def exchange_ghl_code(code: str) -> dict[str, Any]:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             GHL_TOKEN_URL,
             data={
@@ -83,7 +85,7 @@ async def exchange_ghl_code(code: str) -> dict[str, Any]:
 
     if location_id:
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
                 loc_resp = await client.get(
                     f"{GHL_API}/locations/{location_id}",
                     headers={"Authorization": f"Bearer {access_token}", "Version": "2021-07-28"},
@@ -110,7 +112,7 @@ async def _refresh_ghl_token(config: DepartmentGHLConfig, db: AsyncSession) -> s
     settings = get_settings()
     refresh_token = decrypt_token(config.refresh_token)
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             GHL_TOKEN_URL,
             data={
@@ -172,7 +174,7 @@ async def get_valid_token(db: AsyncSession, department: str) -> tuple[str, Depar
 
 
 async def _ghl_get(token: str, path: str, params: dict | None = None, version: str = "2021-07-28") -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.get(
             f"{GHL_API}{path}",
             headers={"Authorization": f"Bearer {token}", "Version": version},
@@ -183,7 +185,7 @@ async def _ghl_get(token: str, path: str, params: dict | None = None, version: s
 
 
 async def _ghl_post(token: str, path: str, json_body: dict, version: str = "2021-07-28") -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(
             f"{GHL_API}{path}",
             headers={"Authorization": f"Bearer {token}", "Version": version, "Content-Type": "application/json"},
@@ -194,7 +196,7 @@ async def _ghl_post(token: str, path: str, json_body: dict, version: str = "2021
 
 
 async def _ghl_put(token: str, path: str, json_body: dict, version: str = "2021-07-28") -> dict:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.put(
             f"{GHL_API}{path}",
             headers={"Authorization": f"Bearer {token}", "Version": version, "Content-Type": "application/json"},

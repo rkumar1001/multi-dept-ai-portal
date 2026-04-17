@@ -30,12 +30,12 @@ _RETRYABLE_ERRORS = (
 # Limits
 _MAX_HISTORY_MESSAGES = 20  # Keep last N messages to cap input tokens
 _MAX_TOOL_RESULT_CHARS = 8000  # Truncate large tool results
-_MAX_TOOL_LOOPS = 5  # Prevent infinite tool loops
+_MAX_TOOL_LOOPS = 5  # Prevent infinite tool loops  
 _RATE_LIMIT_RETRIES = 2  # Retries on 429
 _RATE_LIMIT_BASE_DELAY = 5  # Seconds before first retry
 _TOOL_TIMEOUT = 45  # Max seconds for a single tool execution
 
-
+# if tool slow or not responsive it stops wait and returen error instead of freeze chat 
 async def _execute_with_timeout(coro, tool_name: str, timeout: int = _TOOL_TIMEOUT) -> dict:
     """Execute a tool coroutine with a timeout. Returns error dict on timeout."""
     try:
@@ -44,16 +44,16 @@ async def _execute_with_timeout(coro, tool_name: str, timeout: int = _TOOL_TIMEO
         logger.error("Tool '%s' timed out after %ds", tool_name, timeout)
         return {"error": f"Tool '{tool_name}' timed out after {timeout}s. The external service may be slow or unavailable."}
 
-
-def _truncate_tool_result(result: Any, max_chars: int = _MAX_TOOL_RESULT_CHARS) -> str:
+# truncate result that tool return too much data beyond token limit of claude and cause error and crash chat
+def _truncate_tool_result(result: Any, max_chars: int = _MAX_TOOL_RESULT_CHARS) -> str:   
     """Serialize and truncate a tool result to stay within token budget."""
-    text = json.dumps(result)
+    text = json.dumps(result) #convert dict to string 
     if len(text) <= max_chars:
         return text
     # Truncate and add indicator
-    return text[:max_chars] + '... [truncated]"}'
+    return text[:max_chars] + '... [truncated]"}'   # show data untill 8000 chars
 
-
+# trim the chat history to keep only last 20 message 
 def _trim_history(messages: list[dict], max_messages: int = _MAX_HISTORY_MESSAGES) -> list[dict]:
     """Keep only the last N messages to bound input tokens."""
     if len(messages) <= max_messages:
@@ -215,7 +215,7 @@ class AgentOrchestrator:
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": _truncate_tool_result(tool_result),
+                            "content": _truncate_tool_result(tool_result), #here truncate content to 8000 chars
                         })
 
                 messages.append({"role": "user", "content": tool_results})
@@ -264,16 +264,24 @@ class AgentOrchestrator:
 
         messages = []
         if conversation_history:
-            for msg in conversation_history:
+            trimmed = _trim_history(conversation_history)
+            for msg in trimmed:
                 messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_message})
 
         total_input_tokens = 0
         total_output_tokens = 0
         all_tool_calls: list[dict] = []
+        loop_count = 0
 
         # Agent loop: tool calls → stream final text
         while True:
+            if loop_count >= _MAX_TOOL_LOOPS:
+                logger.warning("Tool loop limit (%d) reached for %s in stream", _MAX_TOOL_LOOPS, department)
+                yield {"type": "text", "content": "I gathered the data but hit the processing limit. Please ask a more specific follow-up question."}
+                yield {"type": "done", "tool_calls": all_tool_calls, "input_tokens": total_input_tokens, "output_tokens": total_output_tokens}
+                return
+            loop_count += 1
             kwargs = {
                 "model": self.model,
                 "max_tokens": 4096,
